@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-agent"
+version = "0.1.0"
+description = "学习助手 + 生活伴侣 AI Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    # 代码按 OpenAI SDK 1.x 的 chat.completions 写的，先锁大版本，避免 API 变动
+    "openai>=1.50,<2",
+    "pydantic-settings>=2.4,<3",
+    "sqlalchemy>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

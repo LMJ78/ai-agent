@@ -1,0 +1,31 @@
+# 虚拟环境
+.venv/
+venv/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 密钥：永远不要提交
+.env
+
+# 本地数据（数据库、向量库、上传文件）
+data/
+*.db
+*.sqlite3
+
+# 本地验证产物（DSH 沙箱内安装依赖用，正常开发不需要）
+.deps/
+.tmp/
+.pipfix/
+pip-*.log
+pip-log*.txt
+pytest-cache-files-*
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
