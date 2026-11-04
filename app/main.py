@@ -12,6 +12,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.chat import router as chat_router
+from app.api.documents import router as documents_router
+from app.api.questions import router as questions_router
+from app.api.quizzes import router as quizzes_router
+from app.api.sessions import router as sessions_router
 from app.config import settings
 from app.db.base import get_db
 from app.db.init import init_db
@@ -33,11 +37,15 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
-    description="学习助手 + 生活伴侣 AI Agent（第 1 周骨架）",
+    description="学习助手 + 生活伴侣 AI Agent（第 3 周：本地 RAG）",
     lifespan=lifespan,
 )
 
 app.include_router(chat_router, prefix="/api", tags=["chat"])
+app.include_router(documents_router, prefix="/api", tags=["documents"])
+app.include_router(sessions_router, prefix="/api", tags=["sessions"])
+app.include_router(questions_router, prefix="/api", tags=["questions"])
+app.include_router(quizzes_router, prefix="/api", tags=["quizzes"])
 
 
 @app.get("/health", tags=["system"])

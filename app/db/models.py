@@ -52,6 +52,7 @@ class ChatSession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(120), default="新对话")
     mode: Mapped[str] = mapped_column(String(16), default="study")  # study / life
+    course: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -84,10 +85,91 @@ class Document(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     course: Mapped[str] = mapped_column(String(64), default="")  # 自由文本标签，不写死科目
+    chapter: Mapped[str] = mapped_column(String(64), default="")
     filename: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str] = mapped_column(String(512), default="")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Chunk(Base):
+    """课件切分后的最小检索单元。
+
+    W3 先用 BM25：tokens 在入库时算好，查询时只做打分，避免每次重新分词。
+    """
+
+    __tablename__ = "chunks"
+    __table_args__ = (UniqueConstraint("document_id", "ordinal", name="uq_chunk_doc_ordinal"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    course: Mapped[str] = mapped_column(String(64), default="", index=True)
+    chapter: Mapped[str] = mapped_column(String(64), default="")
+    filename: Mapped[str] = mapped_column(String(255), default="")
+    location: Mapped[str] = mapped_column(String(64), default="")  # 第 3 张幻灯片 / 第 12 页
+    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text)
+    tokens: Mapped[str] = mapped_column(Text, default="")  # 空格分隔
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Question(Base):
+    """用户录入的一道题：先存草稿，确认转写结果后再用于讲解。
+
+    source_type: text / pdf / pptx / docx / md / txt / image
+    status: draft（待确认）/ confirmed（已确认）
+    """
+
+    __tablename__ = "questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_sessions.id"), nullable=True, index=True
+    )
+    course: Mapped[str] = mapped_column(String(64), default="未分类", index=True)
+    chapter: Mapped[str] = mapped_column(String(64), default="")
+    source_type: Mapped[str] = mapped_column(String(16), default="text")
+    original_text: Mapped[str] = mapped_column(Text, default="")
+    parsed_text: Mapped[str] = mapped_column(Text, default="")
+    source_path: Mapped[str] = mapped_column(String(512), default="")
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class Quiz(Base):
+    """一次 L3 自测。题目和答案分表存，提交前只返回题目。"""
+
+    __tablename__ = "quizzes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    course: Mapped[str] = mapped_column(String(64), default="", index=True)
+    chapter: Mapped[str] = mapped_column(String(64), default="")
+    status: Mapped[str] = mapped_column(String(16), default="ready")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class QuizQuestion(Base):
+    """自测题。options 存 JSON 数组字符串，answer 存 "A"/"B"/"C"/"D"。"""
+
+    __tablename__ = "quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String(16), default="choice")
+    question: Mapped[str] = mapped_column(Text)
+    options: Mapped[str] = mapped_column(Text, default="[]")
+    answer: Mapped[str] = mapped_column(String(16), default="")
+    explanation: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(255), default="")
 
 
 class Todo(Base):

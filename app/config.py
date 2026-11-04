@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
 
+    # 视觉模型：拍照讲题时用，走阿里云百炼的 OpenAI 兼容接口。
+    # 不填也能启动，只是 /api/questions/upload 收到图片会返回 503。
+    vision_api_key: str = ""
+    vision_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    vision_model: str = "qwen-vl-plus"
+
+    # 联网检索：W3 的 web_search 工具用 Tavily。
+    # 不填也能启动，只是模型调用 web_search 时会收到「未配置」提示。
+    tavily_api_key: str = ""
+    tavily_base_url: str = "https://api.tavily.com"
+    web_search_max_results: int = 5
+
     # 数据库
     database_url: str = DEFAULT_DATABASE_URL
 
@@ -42,6 +54,22 @@ class Settings(BaseSettings):
     temperature: float = 0.7
     max_tokens: int = 800
     history_limit: int = 16
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """让项目根目录的 .env 优先于系统环境变量。
+
+        否则机器上如果残留一个旧的 DEEPSEEK_API_KEY，会悄悄覆盖 .env，
+        报 401 时很难查。顺序：初始化参数 > .env > 系统环境变量 > secrets。
+        """
+        return (init_settings, dotenv_settings, env_settings, file_secret_settings)
 
 
 @lru_cache

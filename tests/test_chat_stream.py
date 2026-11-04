@@ -1,70 +1,105 @@
-"""流式对话的单元测试：用假模型替身，不花钱、不依赖网络。"""
+"""流式对话 + 工具调用的接口测试（用假模型，不花钱、不依赖网络）。"""
 
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.api import chat as chat_module
 from app.db.base import SessionLocal
-from app.db.models import Message
+from app.db.models import ChatSession, Message
 from app.main import app
 
 
-class FakeStream:
-    def __init__(self, chunks):
-        self._chunks = chunks
-        self._iter = iter(chunks)
+def _tool_call(name: str, arguments: str, call_id: str = "call_1") -> SimpleNamespace:
+    return SimpleNamespace(
+        id=call_id,
+        type="function",
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
 
-    def __aiter__(self):
-        return self
 
-    async def __anext__(self):
-        try:
-            return next(self._iter)
-        except StopIteration as exc:
-            raise StopAsyncIteration from exc
+def _response(content: str | None = None, tool_calls=None) -> SimpleNamespace:
+    message = SimpleNamespace(content=content, tool_calls=tool_calls)
+    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
 class FakeCompletions:
-    async def create(self, **_kwargs):
-        return FakeStream(
-            [
-                SimpleNamespace(
-                    choices=[SimpleNamespace(delta=SimpleNamespace(content="你好"))]
-                ),
-                SimpleNamespace(
-                    choices=[SimpleNamespace(delta=SimpleNamespace(content="，同学"))]
-                ),
-            ]
-        )
+    def __init__(self, responses: list[SimpleNamespace]):
+        self._responses = list(responses)
+        self.calls: list[dict] = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._responses.pop(0)
 
 
 class FakeClient:
-    def __init__(self) -> None:
-        self.chat = SimpleNamespace(completions=FakeCompletions())
+    def __init__(self, responses: list[SimpleNamespace]):
+        self.chat = SimpleNamespace(completions=FakeCompletions(responses))
 
 
-def test_stream_chat_returns_sse_and_saves_reply(monkeypatch) -> None:
-    monkeypatch.setattr(chat_module, "get_client", lambda: FakeClient())
+def test_stream_chat_runs_tool_and_saves_reply(monkeypatch) -> None:
+    fake = FakeClient(
+        [
+            _response(tool_calls=[_tool_call("get_current_time", "{}")]),
+            _response(content="现在是下午，适合先休息一下。"),
+        ]
+    )
+    monkeypatch.setattr(chat_module, "get_client", lambda: fake)
 
     with TestClient(app) as client:
-        resp = client.post("/api/chat", json={"message": "打个招呼"})
+        resp = client.post("/api/chat", json={"message": "现在几点了？"})
 
     assert resp.status_code == 200
-    assert '"delta": "你好"' in resp.text
-    assert '"delta": "，同学"' in resp.text
+    assert '"type": "tool_call"' in resp.text
+    assert '"type": "tool_result"' in resp.text
+    assert '"delta"' in resp.text
     assert "data: [DONE]" in resp.text
 
     with SessionLocal() as db:
         last = db.scalars(select(Message).order_by(Message.id.desc())).first()
         assert last is not None
         assert last.role == "assistant"
-        assert last.content == "你好，同学"
+        assert last.content == "现在是下午，适合先休息一下。"
+
+
+def test_chat_runs_web_search_tool(monkeypatch) -> None:
+    """联网工具接进循环后，tool_result 会带着 [W1] 回到模型。"""
+    fake = FakeClient(
+        [
+            _response(tool_calls=[_tool_call("web_search", '{"query": "动态规划"}')]),
+            _response(content="网上资料说，动态规划的核心是拆子问题。"),
+        ]
+    )
+    monkeypatch.setattr(chat_module, "get_client", lambda: fake)
+
+    async def fake_search(query: str, max_results: int = 5):
+        assert query == "动态规划"
+        return [
+            {
+                "title": "动态规划入门",
+                "url": "https://example.com/dp",
+                "content": "把问题拆成子问题。",
+            }
+        ]
+
+    monkeypatch.setattr("app.tools.web_search.search_web", fake_search)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/chat", json={"message": "联网查一下动态规划"})
+
+    assert resp.status_code == 200
+    assert '"type": "tool_call"' in resp.text
+    assert '"type": "tool_result"' in resp.text
+
+    second_call = fake.chat.completions.calls[1]["messages"]
+    tool_message = next(item for item in second_call if item["role"] == "tool")
+    assert "[W1] 动态规划入门" in tool_message["content"]
 
 
 def test_chat_rejects_other_users_session(monkeypatch) -> None:
-    monkeypatch.setattr(chat_module, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(chat_module, "get_client", lambda: FakeClient([]))
 
     with TestClient(app) as client:
         resp = client.post(
@@ -73,3 +108,68 @@ def test_chat_rejects_other_users_session(monkeypatch) -> None:
         )
 
     assert resp.status_code == 404
+
+
+def test_chat_rejects_draft_question() -> None:
+    """题目没确认时，接口层直接拦住，不能拿去讲解。"""
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/questions/text",
+            json={"text": "0-1 背包的状态转移方程是什么？", "course": "测试科目"},
+        )
+        assert created.status_code == 200
+        question_id = created.json()["id"]
+
+        resp = client.post(
+            "/api/chat",
+            json={"message": "请讲解这道题", "question_id": question_id},
+        )
+        assert resp.status_code == 409
+        assert "确认" in resp.json()["detail"]
+
+        client.delete(f"/api/questions/{question_id}")
+
+
+def test_chat_injects_confirmed_question(monkeypatch) -> None:
+    """确认后的题会把题干拼进本次提问，模型不需要前端再传一遍。"""
+    question_text = "用动态规划求 0-1 背包，写出状态转移方程。"
+    fake = FakeClient([_response(content="先定义 dp[i][j]……")])
+    monkeypatch.setattr(chat_module, "get_client", lambda: fake)
+
+    with SessionLocal() as db:
+        last_session_id = db.scalar(select(ChatSession.id).order_by(ChatSession.id.desc()))
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/questions/text",
+            json={"text": question_text, "course": "测试科目"},
+        )
+        question_id = created.json()["id"]
+        confirmed = client.post(f"/api/questions/{question_id}/confirm", json={})
+        assert confirmed.status_code == 200
+
+        resp = client.post(
+            "/api/chat",
+            json={
+                "message": "请讲解这道题",
+                "question_id": question_id,
+                "course": "测试科目",
+            },
+        )
+
+        assert resp.status_code == 200
+        sent = fake.chat.completions.calls[0]["messages"][-1]["content"]
+        assert "【待讲题目】" in sent
+        assert question_text in sent
+
+        client.delete(f"/api/questions/{question_id}")
+
+    # 测试产生的会话不留在真实 data/app.db 里。
+    with SessionLocal() as db:
+        sessions = db.scalars(
+            select(ChatSession).where(ChatSession.id > (last_session_id or 0))
+        ).all()
+        for session in sessions:
+            db.execute(delete(Message).where(Message.session_id == session.id))
+            db.delete(session)
+        db.commit()

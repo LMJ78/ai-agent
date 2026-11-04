@@ -2,8 +2,8 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**第 1 周（骨架 + 流式对话）**。  
-本阶段目标：把「请求 → 模型 → 流式返回 → 落库」这条最小链路跑通，并让所有数据表提前带上 `user_id`。
+当前进度：**第 3 周（本地 RAG + 题目入口 + 自测）**。
+本阶段目标：课程课件能检索、能引用；粘贴/上传/拍照的题先转成可编辑题干，确认后才能讲解；能按章节出选择题自测。
 
 ---
 
@@ -12,15 +12,28 @@
 | 能力 | 说明 |
 |---|---|
 | `GET /health` | 健康检查，会真的查一次数据库 |
-| `POST /api/chat` | 对话接口，SSE 流式返回 |
+| `POST /api/chat` | 对话接口，SSE 返回 |
+| 工具循环 | 模型要调工具 → 执行 → 结果回填 → 再问，最多 5 轮 |
+| 五个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索） |
+| 课程资料 | 上传 PDF / DOCX / PPTX / MD / TXT，解析后存入 `chunks` 表 |
+| 本地检索 | BM25 + 中文二元组分词；按 `user_id` / `course` 隔离，回答带 `[L1]` 出处 |
+| 科目维度 | 每个会话绑定一个 `course`；检索默认只查这门课，不再把不同科目混在一起 |
+| 学习记录 | `GET /api/sessions?course=...` 按科目列会话，`?q=...` 按关键词搜历史 |
+| 题目入口 | 粘贴文字、上传 PDF/Word/PPTX、拍照；先存 `draft`，确认/改错后变 `confirmed` |
+| 拍照转写 | Qwen-VL 只做「图 → 文字 + LaTeX」，不解答；图片压缩到长边 1600px |
+| 题目讲解 | `POST /api/chat` 带 `question_id`；未确认的题接口层直接 409 |
+| L3 自测 | 按课程/章节出 1–10 道选择题，提交后判分 + 解析 + `[L]` 出处 |
+| 联网检索 | 本地课件没覆盖时调用 `web_search`（Tavily），回答带 `[W1]` 出处；本地优先，冲突以课件为准 |
+| 批量导入 | `scripts/ingest_course.py` 导入 ch01–ch10 课件，优先 PPTX |
+| 扩展自检 | `scripts/check_w3_extras.py` 检查拍照/联网 Key，并可真实跑一张图/一次搜索 |
+| 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
-| 多轮上下文 | 自动带上最近 16 条消息 |
-| 友好错误 | 没配 Key 返回 503，并提示怎么配 |
-| 测试 | 4 个用例：健康检查、未配置 Key、流式落库、越权会话 |
+| 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
+| 测试 | 32 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、自测判分、联网检索、图片压缩 |
 
-> 已在 Python 3.14 + FastAPI 0.162 下验证：`/health` 200、未配 Key 时 `/api/chat` 503、4 个测试全过。
+> 已在 Python 3.14 + FastAPI 0.162 下验证：32 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
-> 还没有工具调用、文档上传、登录。这些分别在 W2、W3、W5 做。
+> 还没有登录、手机推送（W5/W4 做）。拍照转写和联网检索的代码、测试已完成，但 `.env` 里还没配 `VISION_API_KEY` / `TAVILY_API_KEY`，**真实图片和真实搜索各跑一次才算验收完成**。
 
 ---
 
@@ -33,20 +46,48 @@
 
 ### 1. 创建虚拟环境并安装依赖
 
-在 `ai-agent` 目录下打开终端：
+> 下面的命令都在 **Windows PowerShell** 里执行（不是 cmd，也不是 Git Bash）。
 
 ```powershell
+# 先进入项目目录（requirements-dev.txt 在这里）
+cd "C:\Users\梁明健\Desktop\deepseek harness 工作区\ai-agent开发工作区\ai-agent"
+
 python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
 ```
 
-macOS / Linux 用：
+> 这里**不用** `pip install -e .`。项目直接在当前目录运行，不需要安装成包；
+> 用 `requirements-dev.txt` 还能避开 setuptools 构建依赖的问题。
+
+激活成功后，提示符前面会多出 `(.venv)`。如果没看到，就说明没激活成功。
+
+如果 PowerShell 提示「禁止运行脚本」：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+然后再执行一次 `.\.venv\Scripts\Activate.ps1`。
+
+**不想激活也可以**，直接调用 venv 里的 Python，效果一样：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+后面所有 `python`、`pip`、`uvicorn` 命令，都可以用
+`.\.venv\Scripts\python.exe -m ...` 代替，例如：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+macOS / Linux 才用下面这段（Windows 不要用）：
 
 ```bash
-python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
 ```
 
 ### 2. 配置密钥
@@ -57,11 +98,22 @@ copy .env.example .env
 
 打开 `.env`，把 `DEEPSEEK_API_KEY` 换成真实 Key。没有 Key 时服务也能启动，只是 `/api/chat` 会返回 503。
 
+> 注意：Key 必须是 **DeepSeek 开放平台**（platform.deepseek.com）创建的，不是阿里云百炼/Qwen 的 Key。
+> 本地开发时项目会优先读 `.env`，即使系统里还残留旧的 `DEEPSEEK_API_KEY` 也不会覆盖它。
+
+拍照讲题另外需要 `VISION_API_KEY`（阿里云百炼 Qwen-VL）。不填也能启动，只是上传图片会返回 503；文字/PDF/PPTX 正常。
+
+联网检索需要 `TAVILY_API_KEY`（<https://app.tavily.com> 注册后创建，免费额度够用）。不填也能启动，只是模型调用 `web_search` 时会收到「未配置」提示，本地 `search_notes` 照常工作。
+
 ### 3. 启动
 
 ```powershell
 uvicorn app.main:app --reload
 ```
+
+> 这个窗口会一直被服务占用，**不要关，也不要在里面按 Ctrl+C**。
+> 看到 `Uvicorn running on http://127.0.0.1:8000` 就说明启动成功。
+> 下面的第 4 步请**另开一个 PowerShell 窗口**执行。
 
 打开：
 
@@ -70,10 +122,29 @@ uvicorn app.main:app --reload
 
 ### 4. 试一次对话
 
-PowerShell 里 `curl` 是别名，建议用 `curl.exe`（整条命令复制即可，别换行）：
+新开一个 PowerShell 窗口（不需要激活 venv）。
+
+Windows PowerShell 5.1 对 JSON 引号非常敏感，先用手头最稳的方式验证接口：
 
 ```powershell
-curl.exe -N -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"message":"用一句话解释什么是递归","mode":"study"}'
+$body = @{ message = "用一句话解释什么是递归"; mode = "study" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+> 它会等模型答完一次性返回（不是逐字流式），但能确认整条链路是通的。
+
+想逐字看流式输出，用 `curl.exe`，并在前面加 `--%`，让 PowerShell 原样传参、不要动引号：
+
+```powershell
+curl.exe --% -N -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d "{\"message\":\"用一句话解释什么是递归\",\"mode\":\"study\"}"
+```
+
+如果还是报 422 或 `URL rejected`，用 JSON 文件（最稳，支持流式）：
+
+```powershell
+$json = '{"message":"用一句话解释什么是递归","mode":"study"}'
+[IO.File]::WriteAllText("$PWD\body.json", $json, (New-Object Text.UTF8Encoding($false)))
+curl.exe -N -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" --data-binary "@body.json"
 ```
 
 返回是一行行 SSE：
@@ -93,8 +164,185 @@ data: [DONE]
 第二轮带上 `session_id`，它就能接着上文聊：
 
 ```powershell
-curl.exe -N -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"message":"再举个例子","session_id":1}'
+curl.exe --% -N -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d "{\"message\":\"再举个例子\",\"session_id\":1}"
 ```
+
+### 5. 试工具
+
+W2 之后，这几句话会真正触发工具：
+
+| 用户说 | 调用的工具 |
+|---|---|
+| 「现在几点了？」 | `get_current_time` |
+| 「2+3*4 等于多少？」 | `calculator` |
+| 「帮我记一下周五交实验报告」 | `get_current_time` + `todo(add)` |
+| 「我有哪些待办？」 | `todo(list)` |
+
+工具调用时，SSE 会先出现两类事件，再出现 `delta`：
+
+```
+data: {"type": "tool_call", "name": "get_current_time", "arguments": "{}"}
+
+data: {"type": "tool_result", "name": "get_current_time", "result": "当前时间：2026-11-02 08:53（UTC+8，星期一）"}
+
+data: {"delta": "现在是 **2026 年 11 月 2 日 星期一 早上 8:53**"}
+```
+
+快速验证：
+
+```powershell
+$body = @{ message = "现在几点了？"; mode = "study" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+### 6. 上传课件 / 建知识库
+
+单个文件走上传接口：
+
+```powershell
+curl.exe --% -X POST http://127.0.0.1:8000/api/documents -F "file=@C:\Users\梁明健\Desktop\deepseek harness 工作区\ai-agent开发工作区\ai-agent\data\course_materials\算法设计与分析\ch01\ch01算法概述.pptx" -F "course=算法设计与分析" -F "chapter=ch01"
+```
+
+返回里会有 `chunks` 数量。批量导入 ch01–ch03：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ingest_course.py --chapters ch01,ch02,ch03
+```
+
+然后问：
+
+```powershell
+$body = @{ message = "0-1背包的状态转移方程是什么？"; mode = "study"; course = "算法设计与分析" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+Agent 会先调 `search_notes`，回答里带 `[L3]` 这样的出处。
+
+### 7. 按科目找学习记录
+
+传了 `course` 的会话会绑定这门课，检索默认只查这门课：
+
+```powershell
+curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "course=算法设计与分析"
+```
+
+按关键词搜历史（标题或消息内容）：
+
+```powershell
+curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "q=背包"
+```
+
+回看某个会话：
+
+```powershell
+curl.exe http://127.0.0.1:8000/api/sessions/15/messages
+```
+
+> 一个会话只属于一门课。如果带着 `session_id` 换科目，接口会返回 409，提示新建会话，避免历史记录串在一起。
+
+### 8. 录题：粘贴 / 上传 / 拍照
+
+题目不会直接拿去讲：先存成 `draft`，你确认（可以顺手改错字）之后才变 `confirmed`，接口层会拦住未确认的题。
+
+**粘贴文字：**
+
+```powershell
+$body = @{
+  text = "0-1 背包问题的状态转移方程是什么？"
+  course = "算法设计与分析"
+  chapter = "ch03"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/questions/text" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+**上传 PDF / Word / PPTX / 图片：**
+
+```powershell
+curl.exe --% -X POST http://127.0.0.1:8000/api/questions/upload -F "file=@C:\path\to\题目.png" -F "course=算法设计与分析" -F "chapter=ch03"
+```
+
+图片支持 JPG/PNG/WebP、≤10MB；文档支持 PDF/PPTX/DOCX/MD/TXT、≤20MB。图片会先压缩到长边 1600px，再交给 Qwen-VL 只做转写（文字 + LaTeX），不会解答。
+
+> 没配 `VISION_API_KEY` 时，图片入口返回 503，并提示去 `.env` 配置；文字/文档入口不受影响。
+
+**确认题干（可改错字）：**
+
+```powershell
+$body = @{ text = "改好的题干……" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/questions/1/confirm" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+**带题讲解：**
+
+```powershell
+$body = @{ message = "请讲解这道题"; mode = "study"; question_id = 1 } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+后端会把已确认的题干拼进这次提问，前端不用重复传题干。题目图存在 `data/uploads/questions/{user_id}/`，**不会进入 chunks**。
+
+### 9. L3 考前自测
+
+按课程/章节从本地课件出选择题（1–10 道），出题前不返回答案：
+
+```powershell
+$body = @{
+  course = "算法设计与分析"
+  chapter = "ch03"
+  topic = "0-1背包"
+  count = 2
+} | ConvertTo-Json -Compress
+$quiz = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/quizzes/generate" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+$quiz.items | Format-Table id, question, options
+```
+
+提交答案（key 是题目 id，value 是 A/B/C/D）：
+
+```powershell
+$answers = @{}
+$quiz.items | ForEach-Object { $answers[$_.id] = "A" }
+$body = @{ answers = $answers } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/quizzes/$($quiz.id)/submit" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+提交后会返回 `score` / `percent` / 每题 `your_answer`、`correct_answer`、`explanation` 和 `[L]` 出处。`GET /api/quizzes/{id}` 永远不返回答案。
+
+### 10. 联网检索（web_search）
+
+Agent 的默认顺序是：**先查本地课件 `search_notes`，本地不够才联网**。
+如果问题涉及最新信息，或者你明确说「联网查一下」，它会调用 `web_search`（Tavily），回答里用 `[W1]`、`[W2]` 标网页出处。
+
+```powershell
+$body = @{
+  message = "先查本地课件，再用网上资料补充：0-1 背包的状态转移方程怎么推？"
+  mode = "study"
+  course = "算法设计与分析"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+配置真实 Key：
+
+```powershell
+# 打开 .env，把下面这行改成自己的 Key
+TAVILY_API_KEY=tvly-xxxxxxxx
+```
+
+然后重启 uvicorn，先单独跑一次搜索自检（不经过模型，最快确认 Key 和网络都通）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_w3_extras.py --web "0-1 背包 动态规划 状态转移方程"
+```
+
+看到 `[W1] 标题 / URL / 摘要` 就说明联网通了。拍照也能一起自检：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_w3_extras.py --image "C:\path\to\题目.jpg" --web "动态规划"
+```
+
+> `TAVILY_API_KEY` 没配时，`web_search` 不会让整个请求崩掉，而是返回一句「还没有配置 TAVILY_API_KEY」，模型会据此告诉你先补 Key；本地 `search_notes` 不受影响。
+>
+> 联网结果可能过时，关键结论仍以课程课件为准；两者冲突时提示词要求「以课件为准，并说明差异」。
 
 ---
 
@@ -106,16 +354,37 @@ ai-agent/
 │   ├── main.py            # FastAPI 入口、/health
 │   ├── config.py          # 读 .env，集中配置
 │   ├── api/chat.py        # 对话接口 + SSE
+│   ├── api/documents.py   # 课件上传/列表/删除
+│   ├── api/questions.py   # 题目粘贴/上传/转写/确认
+│   ├── api/quizzes.py     # L3 自测出题/判分
+│   ├── api/sessions.py    # 学习记录：按科目筛选、回看
 │   ├── core/deps.py       # 当前用户（W1 固定 demo）
 │   ├── agent/
 │   │   ├── llm.py         # DeepSeek 客户端
+│   │   ├── vision.py      # Qwen-VL 图片转写
+│   │   ├── loop.py        # 模型 ↔ 工具循环
 │   │   └── prompts.py     # 系统提示词
+│   ├── tools/
+│   │   ├── base.py        # 工具协议
+│   │   ├── time.py        # 当前时间
+│   │   ├── calculator.py  # 安全计算器
+│   │   ├── todo.py        # 待办 CRUD
+│   │   ├── search_notes.py# 课程资料检索
+│   │   └── web_search.py  # Tavily 联网检索
+│   ├── rag/
+│   │   ├── parser.py      # PDF/PPTX/DOCX/MD/TXT 解析
+│   │   ├── tokenizer.py   # 中文二元组分词
+│   │   ├── retriever.py   # BM25 检索
+│   │   └── ingest.py      # 入库（documents + chunks）
 │   └── db/
 │       ├── base.py        # 引擎、Session、WAL
 │       ├── models.py      # 所有表
 │       └── init.py        # 建表 + demo 用户
+├── scripts/
+│   ├── ingest_course.py   # 批量导入课件
+│   └── check_w3_extras.py # 拍照/联网 Key 与真实调用自检
 ├── tests/
-├── data/                  # SQLite（自动生成，已 gitignore）
+├── data/                  # SQLite、课件、chunks（自动生成，已 gitignore）
 ├── .env.example
 └── pyproject.toml
 ```
@@ -125,9 +394,13 @@ ai-agent/
 | 表 | 用途 | 什么时候用 |
 |---|---|---|
 | `users` | 用户 | W1 起 |
-| `chat_sessions` | 会话 | W1 起 |
+| `chat_sessions` | 会话，绑定 `course` 科目 | W1 起 |
 | `messages` | 消息 | W1 起 |
 | `documents` | 课程资料 | W3 |
+| `chunks` | 课件切分后的检索单元 | W3 |
+| `questions` | 题目草稿/确认后的题干 | W3 |
+| `quizzes` | 一套自测 | W3 |
+| `quiz_questions` | 自测里的题、选项、答案 | W3 |
 | `todos` | 待办 | W2 |
 | `memories` | 长期记忆 | W4 |
 | `usage_daily` | 每日用量 | W6 |
@@ -136,41 +409,126 @@ ai-agent/
 
 ---
 
-## 本周验收（W1）
+## 本周验收（W3）
 
-- [ ] `pip install -e ".[dev]"` 无报错
-- [ ] `uvicorn app.main:app --reload` 能启动，`/health` 返回 `status: ok`
-- [ ] `/docs` 能看到两个接口
-- [ ] 填好 Key 后，`/api/chat` 能流式输出中文
-- [ ] 不带 `session_id` 发第二轮时，能自动新建会话；带上时能接上文
-- [ ] 把 Key 删掉重启，`/api/chat` 返回 503 且提示清楚
-- [ ] `pytest` 全绿
-- [ ] `data/app.db` 里 `users` / `chat_sessions` / `messages` 三张表都有 `user_id`
+- [ ] `pytest -q` 显示 `32 passed`
+- [ ] 启动服务后，`POST /api/documents` 能上传一份 PPTX/MD 并返回 chunk 数
+- [ ] `GET /api/documents` 能看到刚上传的资料
+- [ ] 带 `course` 提问后，会话绑定这门课；`GET /api/sessions?course=...` 能查到
+- [ ] 同一会话换科目返回 409，提示新建会话
+- [ ] `GET /api/sessions?q=...` 能按关键词搜到历史消息
+- [ ] 问「0-1 背包的状态转移方程是什么？」，Agent 先调 `search_notes`，回答带 `[L]` 引用
+- [ ] 问一个资料里没有的问题，回答明确说「资料里没有」，不编造
+- [ ] 删除资料后，再问同样的问题检索不到
+- [ ] 批量导入 ch01–ch03 后，`data/app.db` 的 `chunks` 表有数据
+- [ ] 粘贴一段题 → draft；确认后 `POST /api/chat` 带 `question_id` 能讲解
+- [ ] 未确认的题直接带 `question_id` 提问 → 409，接口层拦住
+- [ ] 上传 PDF/PPTX/图片 → 返回可编辑题干；题目图不出现在 `chunks`
+- [ ] 没配 `VISION_API_KEY` 时图片入口 → 503，文字/文档入口正常
+- [ ] 生成一套 2 题自测 → 提交 → 返回分数和解析；`GET` 不泄露答案
+- [ ] 本地资料没有时，Agent 调用 `web_search`，回答带 `[W1]` 引用
+- [ ] `python scripts/check_w3_extras.py --image ... --web ...` 两项都真实跑通
 - [ ] `.env` 没有被提交（`git status` 里看不到）
+
+> 最后三项需要先在 `.env` 填 `VISION_API_KEY` / `TAVILY_API_KEY`；没填时接口和测试仍能全过，但「真实拍照/真实联网」不算验收完成。
 
 ---
 
 ## 常见问题
 
-**Q：启动报 `ModuleNotFoundError: No module named 'app'`**  
-A：确认终端在 `ai-agent` 目录下，且虚拟环境已激活、执行过 `pip install -e .`。
+**Q：`source .venv/bin/activate` 报「无法将 source 项识别为...」**
+A：`source` 是 macOS / Linux 的写法，Windows PowerShell 用：
 
-**Q：`/api/chat` 返回 503**  
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+或者干脆不激活，直接用 `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`。
+
+**Q：`ERROR: Could not open requirements file: ... requirements-dev.txt`**
+A：终端不在项目目录。`requirements-dev.txt` 在 `ai-agent` 目录下，先 `cd` 过去再执行：
+
+```powershell
+cd "C:\Users\梁明健\Desktop\deepseek harness 工作区\ai-agent开发工作区\ai-agent"
+```
+
+**Q：`pip install` 提示 `Defaulting to user installation because normal site-packages is not writeable`**
+A：说明当前用的是**系统 Python**，不是 venv。先激活，或直接用：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+**Q：`pip install -e ".[dev]"` 报 `Could not find a version that satisfies the requirement setuptools>=68`**
+A：这是 pip 在「构建隔离环境」里没拉到 setuptools，常见于镜像或 Python 3.14 的组合。本项目**不需要** editable 安装，直接用：
+
+```powershell
+pip install -r requirements-dev.txt
+```
+
+如果确实想以可编辑模式安装，先 `pip install setuptools`，再：
+
+```powershell
+pip install -e ".[dev]" --no-build-isolation
+```
+
+**Q：启动报 `ModuleNotFoundError: No module named 'app'`**
+A：确认终端在 `ai-agent` 目录下，且虚拟环境已激活、执行过 `pip install -r requirements-dev.txt`。
+
+**Q：`/api/chat` 返回 503**
 A：`.env` 里没填 `DEEPSEEK_API_KEY`，或填的还是 `sk-xxxxxxxx`。改完重启服务。
 
-**Q：端口被占用**  
+**Q：401 `Authentication Fails, Your api key ... is invalid`**
+A：Key 本身无效，不是网络问题。常见原因：
+
+1. 用了**阿里云百炼/Qwen** 的 Key，不是 DeepSeek 的；
+2. Key 被删除/重置过，或复制时漏了字符；
+3. Key 是从别的项目/旧账号复制的。
+
+去 <https://platform.deepseek.com> 重新创建一个 Key，更新 `.env` 后**重启 uvicorn**。可以用下面的命令单独验证 Key：
+
+```powershell
+Invoke-RestMethod -Uri "https://api.deepseek.com/models" -Headers @{ Authorization = "Bearer sk-你的新Key" }
+```
+
+返回模型列表就说明 Key 有效；命令里的 Key 不要发到公开地方。
+
+**Q：`/api/chat` 返回 422，或 curl 报 `URL rejected: Port number was not a decimal number`**
+A：Windows PowerShell 5.1 把 JSON 拆成了多个参数。最稳的是 `Invoke-RestMethod`：
+
+```powershell
+$body = @{ message = "用一句话解释什么是递归"; mode = "study" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+想流式输出，用 `curl.exe --%` 或 JSON 文件，见「试一次对话」。
+
+**Q：curl 报 `Failed to connect to 127.0.0.1:8000`**
+A：服务没在运行。如果 uvicorn 窗口里出现 `Shutting down`，说明你按了 Ctrl+C 或关了窗口。重新运行 `uvicorn app.main:app --reload`，保持这个窗口不关，再另开一个 PowerShell 窗口执行 curl。
+
+**Q：端口被占用**
 A：换端口：`uvicorn app.main:app --reload --port 8001`。
 
-**Q：`pip install` 很慢或超时**  
-A：换国内镜像：`pip install -e ".[dev]" -i https://pypi.tuna.tsinghua.edu.cn/simple`。
+**Q：`pip install` 很慢或超时**
+A：换国内镜像：
 
-**Q：某个依赖装不上、提示要编译**  
+```powershell
+pip install -r requirements-dev.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+如果清华镜像也报找不到包，换阿里云：
+
+```powershell
+pip install -r requirements-dev.txt -i https://mirrors.aliyun.com/pypi/simple/
+```
+
+**Q：某个依赖装不上、提示要编译**
 A：优先用 Python 3.12 / 3.13。本项目在 3.14 上验证过，但个别依赖可能还没发布 3.14 的预编译包。
 
-**Q：数据库锁住（`database is locked`）**  
+**Q：数据库锁住（`database is locked`）**
 A：确认没有同时开多个写入进程；本项目已开启 WAL。实在不行删掉 `data/app.db` 重启（会丢本地数据）。
 
-**Q：PowerShell 里中文显示乱码**  
+**Q：PowerShell 里中文显示乱码**
 A：先执行 `chcp 65001`，或用 Windows Terminal。
 
 ---
@@ -227,19 +585,30 @@ cd "C:\Users\梁明健\Desktop\deepseek harness 工作区\ai-agent开发工作�
 git init
 git status
 git add .
-git commit -m "W1: FastAPI 骨架与流式对话"
+git commit -m "W3: 本地 RAG + 课件入库"
 git log --oneline
 ```
 
 `git status` 里应该**看不到 `.env`**（本项目已在 `.gitignore` 里排除）。
 
+### 小技巧：`git log` 卡住不动
+
+如果执行 `git log` 后光标停在 `:`（或左下角显示 `:`），不是卡死，是进了分页器：
+
+- 按 `q` 退出
+- 或者以后用 `git --no-pager log --oneline`
+- 想让它只有一屏时自动退出：`git config --global core.pager "less -F"`
+
 ---
 
-## 下一周（W2）要做什么
+## 接下来
 
-1. 定义工具协议（`name` / `description` / `parameters` / `execute`）。
-2. 手写「模型 → 工具 → 模型」循环，最多 5 轮。
-3. 加三个工具：时间、计算器、待办（SQLite）。
-4. 接口返回这一轮调用了哪些工具，方便调试。
+W3 的代码、测试、文档都已收完，只剩**真实 Key 验收**：拍一张印刷体题目、联网搜一次，确认 `[W1]` 和转写结果。补 `.env` 里的 `VISION_API_KEY` / `TAVILY_API_KEY` 后按「本周验收（W3）」最后三项跑。
 
-具体验收标准见工作区上一级的 `AI-Agent开发大纲.md` 第 2 周。
+W4 主线：
+
+1. 解题老师：先提示、再分步、最后答案。
+2. 生活模式：人格、长期记忆、待办日期。
+3. 手机推送：PushPlus 到点提醒。
+
+具体验收标准见工作区上一级的 `AI-Agent开发大纲.md` 第 3、4 周。

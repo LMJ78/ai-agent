@@ -1,9 +1,7 @@
 """对话接口。
 
-第 1 周只做两件事：
-1. 把消息存进数据库（含 user_id）；
-2. 调模型，用 SSE 流式把回答推回去。
-还没有工具调用，第 2 周才加。
+W1：存消息 + 调模型 + SSE 流式。
+W2：把「模型 → 工具 → 模型」的循环接进来，并把工具 trace 一并推给前端。
 """
 
 import json
@@ -18,11 +16,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent.llm import LLMNotConfiguredError, get_client
+from app.agent.loop import run_agent
 from app.agent.prompts import build_system_prompt
 from app.config import settings
 from app.core.deps import get_current_user
 from app.db.base import SessionLocal, get_db
-from app.db.models import ChatSession, Message, User, utcnow
+from app.db.models import ChatSession, Message, Question, User, utcnow
+from app.tools.time import format_now
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,6 +32,11 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000, description="用户说的话")
     session_id: int | None = Field(default=None, description="不传则新建会话")
     mode: Literal["study", "life"] = "study"
+    course: str | None = Field(default=None, max_length=64, description="学习模式下的科目")
+    question_id: int | None = Field(
+        default=None,
+        description="已确认的题目 id；传了会把题干拼进本次提问，draft 状态会被拒绝",
+    )
 
 
 def _sse(payload: dict[str, Any]) -> str:
@@ -39,7 +44,20 @@ def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _get_or_create_session(db: Session, user: User, req: ChatRequest) -> ChatSession:
+def _session_course(req: ChatRequest, override: str | None = None) -> str:
+    if req.mode == "life":
+        return ""
+    value = override if override is not None else (req.course or "")
+    return value.strip()[:64]
+
+
+def _get_or_create_session(
+    db: Session,
+    user: User,
+    req: ChatRequest,
+    course_override: str | None = None,
+) -> ChatSession:
+    course = _session_course(req, course_override)
     if req.session_id is not None:
         session = db.scalar(
             select(ChatSession).where(
@@ -49,13 +67,22 @@ def _get_or_create_session(db: Session, user: User, req: ChatRequest) -> ChatSes
         )
         if session is None:
             raise HTTPException(status_code=404, detail="会话不存在")
+
+        # 一个会话只属于一门课，避免历史记录混在一起。
+        if course and session.course and course != session.course:
+            raise HTTPException(
+                status_code=409,
+                detail=f"这个会话属于「{session.course}」，请新建一个会话再问「{course}」",
+            )
+        if course and not session.course:
+            session.course = course
         if session.mode != req.mode:
             session.mode = req.mode
-            db.commit()
+        db.commit()
         return session
 
     title = req.message.strip().replace("\n", " ")[:30] or "新对话"
-    session = ChatSession(user_id=user.id, title=title, mode=req.mode)
+    session = ChatSession(user_id=user.id, title=title, mode=req.mode, course=course)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -73,45 +100,52 @@ def _load_history(db: Session, session_id: int, limit: int) -> list[dict[str, st
     return [{"role": m.role, "content": m.content} for m in reversed(rows)]
 
 
-async def _stream_reply(
+def _chunks(text: str, size: int = 24) -> list[str]:
+    """把最终回答切成小块，沿用 W1 的 SSE 格式推给前端。
+
+    注意：这是「接口层分块」，不是模型逐 token 流式；W2 先保证工具链路正确，
+    真正的逐 token 流式留到 W5 前端一起优化。
+    """
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
+async def _stream_agent(
     client: Any,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     session_id: int,
     user_id: int,
+    course: str = "",
 ) -> AsyncIterator[str]:
-    parts: list[str] = []
+    final_parts: list[str] = []
 
     try:
-        stream = await client.chat.completions.create(
-            model=settings.deepseek_model,
-            messages=messages,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-            stream=True,
-        )
+        yield _sse({"session_id": session_id, "course": course})
 
-        # 第一帧先告诉前端 session_id，方便它记住这轮对话属于哪个会话。
-        yield _sse({"session_id": session_id})
+        async for event in run_agent(client, messages, user_id, course=course):
+            if event.type == "final":
+                text = str(event.data.get("content", ""))
+                if text:
+                    final_parts.append(text)
+                    for chunk in _chunks(text):
+                        yield _sse({"delta": chunk})
+                yield "data: [DONE]\n\n"
+                return
 
-        async for chunk in stream:
-            # 有些 chunk 的 choices 为空（例如用量帧），直接跳过。
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta.content
-            if delta:
-                parts.append(delta)
-                yield _sse({"delta": delta})
+            if event.type == "error":
+                yield _sse({"error": event.data.get("message", "未知错误")})
+                yield "data: [DONE]\n\n"
+                return
 
-        yield "data: [DONE]\n\n"
+            # tool_call / tool_result：单独的事件类型，前端可以显示「正在查待办…」
+            yield _sse({"type": event.type, **event.data})
 
-    except Exception as exc:  # noqa: BLE001 - 这里要把错误变成前端能看懂的提示
-        logger.exception("模型调用失败")
-        yield _sse({"error": f"模型调用失败：{exc}"})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Agent 执行失败")
+        yield _sse({"error": f"Agent 执行失败：{exc}"})
         yield "data: [DONE]\n\n"
 
     finally:
-        # 流结束后再落库：即使客户端中途断开，已经生成的部分也会保存。
-        text = "".join(parts).strip()
+        text = "".join(final_parts).strip()
         if text:
             try:
                 with SessionLocal() as db:
@@ -137,33 +171,71 @@ async def chat(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    question: Question | None = None
+    course_override: str | None = None
+
+    if req.question_id is not None:
+        question = db.scalar(
+            select(Question).where(
+                Question.id == req.question_id,
+                Question.user_id == user.id,
+            )
+        )
+        if question is None:
+            raise HTTPException(status_code=404, detail="题目不存在")
+        if question.status != "confirmed":
+            raise HTTPException(
+                status_code=409,
+                detail="这道题还没有确认，先调用 /api/questions/{id}/confirm 再讲解",
+            )
+        if not question.parsed_text.strip():
+            raise HTTPException(status_code=409, detail="这道题没有题干文字，请重新录入")
+        if req.mode == "life":
+            raise HTTPException(status_code=400, detail="题目讲解请使用 study 模式")
+        if req.course and question.course and req.course.strip() != question.course:
+            raise HTTPException(
+                status_code=409,
+                detail=f"这道题属于「{question.course}」，不能按「{req.course}」讲解",
+            )
+        course_override = req.course or question.course
+
     # 先检查 Key：没有就返回 503，别让用户看到一长串堆栈。
     try:
         client = get_client()
     except LLMNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    session = _get_or_create_session(db, user, req)
+    session = _get_or_create_session(db, user, req, course_override=course_override)
     history = _load_history(db, session.id, settings.history_limit)
+
+    message_text = req.message.strip()
+    if question is not None:
+        # 题干由后端拼接，前端只传一句「请讲解这道题」即可，避免题干被截断。
+        message_text = f"{message_text}\n\n【待讲题目】\n{question.parsed_text}"
 
     db.add(
         Message(
             session_id=session.id,
             user_id=user.id,
             role="user",
-            content=req.message,
+            content=message_text,
         )
     )
     db.commit()
 
     messages = [
-        {"role": "system", "content": build_system_prompt(req.mode)},
+        {
+            "role": "system",
+            "content": build_system_prompt(
+                req.mode, now_text=format_now(), course=session.course
+            ),
+        },
         *history,
-        {"role": "user", "content": req.message},
+        {"role": "user", "content": message_text},
     ]
 
     return StreamingResponse(
-        _stream_reply(client, messages, session.id, user.id),
+        _stream_agent(client, messages, session.id, user.id, session.course),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -24,6 +24,7 @@ data/
 pip-*.log
 pip-log*.txt
 pytest-cache-files-*
+pytest-of-*/
 
 # 编辑器 / 系统
 .idea/
