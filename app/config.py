@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
     # 生成参数（第 6 周做配额时还会用到 max_tokens）
     temperature: float = 0.7
-    max_tokens: int = 800
+    max_tokens: int = 3000
     history_limit: int = 16
 
     @classmethod

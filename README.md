@@ -2,7 +2,7 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**第 4 周（解题老师 + 生活伴侣 + 推送）已实现，待真实推送验收**。
+当前进度：**第 4 周（解题老师 + 生活伴侣 + 推送）已完成验收，准备进入 W5**。
 本阶段目标：题目讲解先提示、再分步、最后给答案；生活模式能记忆、能待办；待办到点能推到手机。
 
 ---
@@ -457,6 +457,27 @@ ai-agent/
 ```powershell
 python scripts/w3_acceptance.py
 ```
+
+## 本周验收（W4）
+
+- [x] `python scripts/w4_acceptance.py`：10 道题都走完 hint → step → answer，三阶段 10/10，本地 `[L]` 8/8
+- [x] 人工核对 10 道答案 10/10 通过（验收单 `docs/W4-10题验收单.md`；完整对话 `data/acceptance/w4/q01.md` … `q10.md`）
+- [x] PushPlus 测试消息能收到
+- [x] 连续 10 条待办到点提醒都能收到（10/10）
+- [x] `pytest -q` 显示 `48 passed`
+
+W4 十题报告：`data/acceptance/w4_report.md`；每道题的完整 hint/step/answer 在 `data/acceptance/w4/`；人工核对用 `docs/W4-10题验收单.md`。
+
+```powershell
+# 10 道题（会真实调用模型，约 1–2 分钟）
+python scripts/w4_acceptance.py
+
+# PushPlus：先设置 token，再配置通道、发测试消息、创建 10 条到点待办
+$env:PUSHPLUS_TOKEN = "你的 PushPlus token"
+python scripts/w4_push_acceptance.py --count 10 --interval 10 --wait 240
+```
+
+> PushPlus token 在 https://www.pushplus.plus/ 微信扫码登录后复制。脚本不会打印 token；token 存在本地数据库 `push_channels` 表里，`.env` 和 `data/` 都被 git 忽略。
 
 ---
 
