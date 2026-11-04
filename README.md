@@ -578,18 +578,24 @@ git config --global --list
 - `init.defaultBranch main`：以后新建仓库默认分支叫 `main`
 - `core.quotepath false`：中文文件名不显示成 `\346\226...`
 
-### 第一次提交
+### 提交记录
+
+仓库已经初始化过，W1 和 W2/W3 两个阶段的提交是：
+
+```text
+851dfb3 W2/W3: 工具循环、本地 RAG、题目与联网检索
+42cad00 W1: FastAPI 骨架与流式对话
+```
+
+查看历史：
 
 ```powershell
 cd "C:\Users\梁明健\Desktop\deepseek harness 工作区\ai-agent开发工作区\ai-agent"
-git init
+git --no-pager log --oneline
 git status
-git add .
-git commit -m "W3: 本地 RAG + 课件入库"
-git log --oneline
 ```
 
-`git status` 里应该**看不到 `.env`**（本项目已在 `.gitignore` 里排除）。
+以后每完成一周，再 `git add` + `git commit` 一次即可，不用再 `git init`。`git status` 里应该**看不到 `.env`**（本项目已在 `.gitignore` 里排除）。
 
 ### 小技巧：`git log` 卡住不动
 
