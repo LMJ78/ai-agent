@@ -587,9 +587,11 @@ git config --global --list
 
 ### 提交记录
 
-仓库已经初始化过，W1 和 W2/W3 两个阶段的提交是：
+仓库已经初始化过，W1、W2/W3 和 W3 验收的提交是：
 
 ```text
+321ecec W3: 完成拍照与问题验收，修复视觉模型名
+bff02f8 docs: 更新 README 提交记录
 851dfb3 W2/W3: 工具循环、本地 RAG、题目与联网检索
 42cad00 W1: FastAPI 骨架与流式对话
 ```
