@@ -37,6 +37,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="已确认的题目 id；传了会把题干拼进本次提问，draft 状态会被拒绝",
     )
+    teaching_stage: Literal["hint", "step", "answer"] | None = Field(
+        default=None,
+        description="解题阶段；不传则根据「继续 / 直接看答案」自动判断，默认只给提示",
+    )
 
 
 def _sse(payload: dict[str, Any]) -> str:
@@ -49,6 +53,21 @@ def _session_course(req: ChatRequest, override: str | None = None) -> str:
         return ""
     value = override if override is not None else (req.course or "")
     return value.strip()[:64]
+
+
+def _resolve_teaching_stage(req: ChatRequest, has_question: bool) -> str | None:
+    """题目讲解的默认节奏：先提示；「继续」下一步；「直接看答案」才给答案。"""
+    if not has_question:
+        return None
+    if req.teaching_stage:
+        return req.teaching_stage
+
+    text = req.message.strip()
+    if any(word in text for word in ("直接看答案", "看答案", "给答案", "最终答案")):
+        return "answer"
+    if any(word in text for word in ("继续", "下一步", "然后呢")):
+        return "step"
+    return "hint"
 
 
 def _get_or_create_session(
@@ -208,6 +227,7 @@ async def chat(
     session = _get_or_create_session(db, user, req, course_override=course_override)
     history = _load_history(db, session.id, settings.history_limit)
 
+    teaching_stage = _resolve_teaching_stage(req, has_question=question is not None)
     message_text = req.message.strip()
     if question is not None:
         # 题干由后端拼接，前端只传一句「请讲解这道题」即可，避免题干被截断。
@@ -227,7 +247,10 @@ async def chat(
         {
             "role": "system",
             "content": build_system_prompt(
-                req.mode, now_text=format_now(), course=session.course
+                req.mode,
+                now_text=format_now(),
+                course=session.course,
+                teaching_stage=teaching_stage,
             ),
         },
         *history,

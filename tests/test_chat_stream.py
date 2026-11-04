@@ -130,6 +130,47 @@ def test_chat_rejects_draft_question() -> None:
         client.delete(f"/api/questions/{question_id}")
 
 
+def test_teaching_stage_defaults_to_hint_then_answer(monkeypatch) -> None:
+    """默认先给提示；用户说「直接看答案」才切完整解答。"""
+    fake = FakeClient(
+        [
+            _response(content="先想想：把大问题拆成小问题，重复的子问题在哪里？"),
+            _response(content="【课程】算法\n【答案】……"),
+        ]
+    )
+    monkeypatch.setattr(chat_module, "get_client", lambda: fake)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/questions/text",
+            json={"text": "0-1 背包的状态转移方程怎么推？", "course": "测试解题"},
+        )
+        assert created.status_code == 200
+        question_id = created.json()["id"]
+        assert client.post(f"/api/questions/{question_id}/confirm", json={}).status_code == 200
+
+        first = client.post(
+            "/api/chat",
+            json={"message": "请讲解这道题", "question_id": question_id},
+        )
+        assert first.status_code == 200
+        first_prompt = fake.chat.completions.calls[0]["messages"][0]["content"]
+        assert "解题老师" in first_prompt
+        assert "当前阶段：只给提示" in first_prompt
+        assert "不要给完整步骤" in first_prompt
+
+        second = client.post(
+            "/api/chat",
+            json={"message": "直接看答案", "question_id": question_id},
+        )
+        assert second.status_code == 200
+        second_prompt = fake.chat.completions.calls[1]["messages"][0]["content"]
+        assert "当前阶段：完整解答" in second_prompt
+        assert "【答案】" in second_prompt
+
+        client.delete(f"/api/questions/{question_id}")
+
+
 def test_chat_injects_confirmed_question(monkeypatch) -> None:
     """确认后的题会把题干拼进本次提问，模型不需要前端再传一遍。"""
     question_text = "用动态规划求 0-1 背包，写出状态转移方程。"
