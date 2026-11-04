@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # 不填也能启动，只是 /api/questions/upload 收到图片会返回 503。
     vision_api_key: str = ""
     vision_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    vision_model: str = "qwen-vl-plus"
+    vision_model: str = "qwen3-vl-plus"
 
     # 联网检索：W3 的 web_search 工具用 Tavily。
     # 不填也能启动，只是模型调用 web_search 时会收到「未配置」提示。

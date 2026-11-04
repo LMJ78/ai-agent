@@ -26,6 +26,7 @@
 | 联网检索 | 本地课件没覆盖时调用 `web_search`（Tavily），回答带 `[W1]` 出处；本地优先，冲突以课件为准 |
 | 批量导入 | `scripts/ingest_course.py` 导入 ch01–ch10 课件，优先 PPTX |
 | 扩展自检 | `scripts/check_w3_extras.py` 检查拍照/联网 Key，并可真实跑一张图/一次搜索 |
+| W3 验收 | `scripts/w3_acceptance.py` 生成 10 张印刷体题目截图、跑 6 个问题，报告写到 `data/acceptance/w3_report.md` |
 | 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
 | 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
@@ -33,7 +34,7 @@
 
 > 已在 Python 3.14 + FastAPI 0.162 下验证：32 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
-> 还没有登录、手机推送（W5/W4 做）。拍照转写和联网检索的代码、测试已完成，但 `.env` 里还没配 `VISION_API_KEY` / `TAVILY_API_KEY`，**真实图片和真实搜索各跑一次才算验收完成**。
+> 还没有登录、手机推送（W5/W4 做）。拍照转写和联网检索已用真实 Key 跑通：`w3_acceptance.py` 的 10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。注意这 10 张是 PIL 生成的印刷体，不是手机实拍；手机照片可用 `check_w3_extras.py --image` 单独验证。
 
 ---
 
@@ -411,7 +412,7 @@ ai-agent/
 
 ## 本周验收（W3）
 
-- [ ] `pytest -q` 显示 `32 passed`
+- [x] `pytest -q` 显示 `32 passed`
 - [ ] 启动服务后，`POST /api/documents` 能上传一份 PPTX/MD 并返回 chunk 数
 - [ ] `GET /api/documents` 能看到刚上传的资料
 - [ ] 带 `course` 提问后，会话绑定这门课；`GET /api/sessions?course=...` 能查到
@@ -427,10 +428,16 @@ ai-agent/
 - [ ] 没配 `VISION_API_KEY` 时图片入口 → 503，文字/文档入口正常
 - [ ] 生成一套 2 题自测 → 提交 → 返回分数和解析；`GET` 不泄露答案
 - [ ] 本地资料没有时，Agent 调用 `web_search`，回答带 `[W1]` 引用
-- [ ] `python scripts/check_w3_extras.py --image ... --web ...` 两项都真实跑通
-- [ ] `.env` 没有被提交（`git status` 里看不到）
+- [x] 10 张印刷体题目截图，10/10 转写可读；6 个问题 6/6 通过；本地 `[L]` 4/4（报告：`data/acceptance/w3_report.md`）
+- [x] `python scripts/w3_acceptance.py` 能复跑整套验收
+- [x] `python scripts/check_w3_extras.py --image ... --web ...` 两项都真实跑通
+- [x] `.env` 没有被提交（`git status` 里看不到）
 
-> 最后三项需要先在 `.env` 填 `VISION_API_KEY` / `TAVILY_API_KEY`；没填时接口和测试仍能全过，但「真实拍照/真实联网」不算验收完成。
+> 验收已通过；`w3_acceptance.py` 的 10 张是 PIL 生成的印刷体，真实手机照片用 `check_w3_extras.py --image` 单张验证。复跑整套：
+
+```powershell
+python scripts/w3_acceptance.py
+```
 
 ---
 
@@ -609,7 +616,7 @@ git status
 
 ## 接下来
 
-W3 的代码、测试、文档都已收完，只剩**真实 Key 验收**：拍一张印刷体题目、联网搜一次，确认 `[W1]` 和转写结果。补 `.env` 里的 `VISION_API_KEY` / `TAVILY_API_KEY` 后按「本周验收（W3）」最后三项跑。
+W3 的代码、测试、文档和验收都已完成：`w3_acceptance.py` 的 10 张截图 **10/10 可读**、6 个问题 **6/6 通过**、本地 `[L]` **4/4**，报告在 `data/acceptance/w3_report.md`。真实手机拍照可再用 `check_w3_extras.py --image` 验证单张。
 
 W4 主线：
 
