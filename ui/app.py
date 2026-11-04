@@ -160,6 +160,18 @@ def login_page() -> None:
     st.caption("管理员生成邀请码：`python scripts/create_invite.py --uses 1 --days 30`")
 
 
+def go_to(page: str) -> None:
+    """Request a navigation change; applied before the radio is created next run."""
+    st.session_state.pending_nav = page
+    st.rerun()
+
+
+def apply_pending_nav() -> None:
+    target = st.session_state.pop("pending_nav", None)
+    if target in NAV:
+        st.session_state.nav = target
+
+
 def sidebar() -> str:
     with st.sidebar:
         st.title("📚 伴学")
@@ -353,8 +365,7 @@ def history_page() -> None:
             with c2:
                 if st.button("打开", key=f"open_{row['id']}"):
                     _load_messages(row["id"])
-                    st.session_state.nav = "聊天"
-                    st.rerun()
+                    go_to("聊天")
             with c3:
                 if st.button("删除", key=f"del_{row['id']}"):
                     try:
@@ -435,8 +446,7 @@ def questions_page() -> None:
                 )
                 st.session_state.pending_question = None
                 st.session_state.active_question_id = updated["id"]
-                st.session_state.nav = "聊天"
-                st.rerun()
+                go_to("聊天")
             except ApiError as exc:
                 api_error(exc)
     with c2:
@@ -627,6 +637,7 @@ def main() -> None:
         login_page()
         return
 
+    apply_pending_nav()
     page = sidebar()
     if page == "聊天":
         chat_page()
