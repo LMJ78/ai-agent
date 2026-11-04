@@ -2,8 +2,8 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**第 4 周（解题老师 + 生活伴侣 + 推送）已完成验收，准备进入 W5**。
-本阶段目标：题目讲解先提示、再分步、最后给答案；生活模式能记忆、能待办；待办到点能推到手机。
+当前进度：**第 5 周（多用户 + Streamlit 前端）进行中**。
+本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；Streamlit 能登录、聊天、录题、看历史、管待办/记忆/推送。
 
 ---
 
@@ -12,6 +12,10 @@
 | 能力 | 说明 |
 |---|---|
 | `GET /health` | 健康检查，会真的查一次数据库 |
+| 注册 / 登录 | `POST /api/auth/register`（必须邀请码）/ `POST /api/auth/login`，bcrypt + JWT 7 天 |
+| 用户隔离 | 所有业务接口都从 `Authorization: Bearer <token>` 取当前用户；A 的会话/题目给 B → 404 |
+| 邀请码 | `scripts/create_invite.py` 生成一次性/多次邀请码 |
+| Streamlit 前端 | `ui/app.py`：登录、聊天、学习记录、录题、待办、记忆、推送设置 |
 | `POST /api/chat` | 对话接口，SSE 返回 |
 | 工具循环 | 模型要调工具 → 执行 → 结果回填 → 再问，最多 5 轮 |
 | 六个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索）、`memory`（长期记忆） |
@@ -35,11 +39,11 @@
 | 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
 | 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
-| 测试 | 48 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、情绪、记忆、推送、提醒 |
+| 测试 | 55 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离 |
 
-> 已在 Python 3.14 + FastAPI 0.162 下验证：48 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
+> 已在 Python 3.14 + FastAPI 0.162 下验证：55 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
-> 还没有登录（W5 做）；生活记忆和 PushPlus 推送已实现，真实 PushPlus token 发送待验收。拍照转写和联网检索已用真实 Key 跑通：`w3_acceptance.py` 的 10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。注意这 10 张是 PIL 生成的印刷体，不是手机实拍；手机照片可用 `check_w3_extras.py --image` 单独验证。
+> W5 已接邀请码注册、JWT 登录和 Streamlit 前端；生活记忆和 PushPlus 推送已实现，真实 PushPlus token 发送待验收。拍照转写和联网检索已用真实 Key 跑通：`w3_acceptance.py` 的 10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。注意这 10 张是 PIL 生成的印刷体，不是手机实拍；手机照片可用 `check_w3_extras.py --image` 单独验证。
 
 ---
 
@@ -126,7 +130,47 @@ uvicorn app.main:app --reload
 - 接口文档：<http://127.0.0.1:8000/docs>
 - 健康检查：<http://127.0.0.1:8000/health>
 
+### 3.5 注册、登录与前端（W5）
+
+**先生成一个邀请码**（另开一个窗口，在 `ai-agent` 目录下）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\create_invite.py --uses 1 --days 30 --note "算法班同学"
+```
+
+把输出的 `AI-XXXXXXXX` 填进注册表单。用 PowerShell 注册并拿到 token：
+
+```powershell
+$body = @{
+  username = "yourname"
+  password = "password123"
+  display_name = "你的昵称"
+  invite_code = "AI-XXXXXXXX"
+} | ConvertTo-Json -Compress
+$login = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/auth/register" `
+  -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+$token = $login.access_token
+$headers = @{ Authorization = "Bearer $token" }
+```
+
+之后所有 `/api/*` 业务接口都要带 `-Headers $headers`。没带或 token 过期会返回 **401**。
+
+**启动 Streamlit 前端**（再开一个窗口，仍在 `ai-agent` 目录）：
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run ui/app.py
+```
+
+浏览器打开 <http://127.0.0.1:8501>。用刚才注册的账号登录；刷新页面会通过 cookie 保留登录状态。
+左侧可以切换：聊天 / 学习记录 / 录题 / 待办 / 记忆 / 推送设置。
+
+> 前端默认连 `http://127.0.0.1:8000`。如果后端换了地址：
+> `$env:API_BASE_URL="http://127.0.0.1:8001"; streamlit run ui/app.py`。
+
 ### 4. 试一次对话
+
+> W5 起所有 `/api/*` 都要登录。下面的 `Invoke-RestMethod` 请加上 `-Headers $headers`；
+> `curl.exe` 请加 `-H "Authorization: Bearer <token>"`。`$headers` 怎么来见 3.5。
 
 新开一个 PowerShell 窗口（不需要激活 venv）。
 
@@ -134,7 +178,7 @@ Windows PowerShell 5.1 对 JSON 引号非常敏感，先用手头最稳的方式
 
 ```powershell
 $body = @{ message = "用一句话解释什么是递归"; mode = "study" } | ConvertTo-Json -Compress
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body $body -Headers $headers
 ```
 
 > 它会等模型答完一次性返回（不是逐字流式），但能确认整条链路是通的。

@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     tavily_base_url: str = "https://api.tavily.com"
     web_search_max_results: int = 5
 
+    # 登录 / JWT（第 5 周）
+    # 本地开发可以先用默认值；上线前必须在 .env 里换成随机长字符串。
+    jwt_secret: str = "dev-only-change-me-please-set-JWT_SECRET"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_days: int = 7
+
     # 数据库
     database_url: str = DEFAULT_DATABASE_URL
 

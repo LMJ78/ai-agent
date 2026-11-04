@@ -59,6 +59,8 @@ def _question_dict(question: Question) -> dict:
         "source_type": question.source_type,
         "original_text": question.original_text,
         "parsed_text": question.parsed_text,
+        # 前端确认卡片用它显示原图；只返回自己的题，不泄露别人路径。
+        "source_path": question.source_path,
         "status": question.status,
         "needs_confirmation": question.status != "confirmed",
         "created_at": question.created_at.isoformat() if question.created_at else "",

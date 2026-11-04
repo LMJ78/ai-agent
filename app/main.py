@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.documents import router as documents_router
 from app.api.memories import router as memories_router
@@ -19,6 +20,7 @@ from app.api.push import router as push_router
 from app.api.questions import router as questions_router
 from app.api.quizzes import router as quizzes_router
 from app.api.sessions import router as sessions_router
+from app.api.todos import router as todos_router
 from app.config import settings
 from app.db.base import get_db
 from app.db.init import init_db
@@ -54,6 +56,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(documents_router, prefix="/api", tags=["documents"])
 app.include_router(sessions_router, prefix="/api", tags=["sessions"])
@@ -61,6 +64,7 @@ app.include_router(questions_router, prefix="/api", tags=["questions"])
 app.include_router(quizzes_router, prefix="/api", tags=["quizzes"])
 app.include_router(memories_router, prefix="/api", tags=["memories"])
 app.include_router(push_router, prefix="/api", tags=["push"])
+app.include_router(todos_router, prefix="/api", tags=["todos"])
 
 
 @app.get("/health", tags=["system"])
