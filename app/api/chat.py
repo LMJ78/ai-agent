@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.emotion import detect_emotion
 from app.agent.llm import LLMNotConfiguredError, get_client
 from app.agent.loop import run_agent
 from app.agent.prompts import build_system_prompt
@@ -22,6 +23,11 @@ from app.config import settings
 from app.core.deps import get_current_user
 from app.db.base import SessionLocal, get_db
 from app.db.models import ChatSession, Message, Question, User, utcnow
+from app.services.memories import (
+    format_memories_for_prompt,
+    recall_memories,
+    remember_explicit,
+)
 from app.tools.time import format_now
 
 logger = logging.getLogger(__name__)
@@ -233,6 +239,16 @@ async def chat(
         # 题干由后端拼接，前端只传一句「请讲解这道题」即可，避免题干被截断。
         message_text = f"{message_text}\n\n【待讲题目】\n{question.parsed_text}"
 
+    # 用户说「记住……」时先落库，后面召回就能带上；模型再调 memory 也不会重复。
+    try:
+        remember_explicit(db, user.id, message_text)
+    except ValueError:
+        pass
+
+    memories = recall_memories(db, user.id, message_text, limit=6)
+    memory_text = format_memories_for_prompt(memories)
+    emotion = detect_emotion(message_text) if req.mode == "life" else None
+
     db.add(
         Message(
             session_id=session.id,
@@ -251,6 +267,8 @@ async def chat(
                 now_text=format_now(),
                 course=session.course,
                 teaching_stage=teaching_stage,
+                emotion=emotion,
+                memories=memory_text,
             ),
         },
         *history,

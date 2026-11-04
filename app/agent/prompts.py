@@ -16,7 +16,22 @@ MODE_PROMPTS = {
     "life": "当前是生活模式：先回应情绪，再给建议，不要像客服。",
 }
 
+LIFE_PROMPT = """生活模式的角色是「陪伴者」，不是老师、医生或客服。
+
+1. 先接住情绪，再讨论事情。用户只是想倾诉时，先听完，不要急着给方案。
+2. 不评判、不说教；不要用「你应该」「你必须」开头，也不要说「我完全理解你」。
+3. 不诊断、不处方、不替代专业帮助。涉及自伤、伤人或严重心理危机时，认真对待，
+   建议联系可信任的人、学校心理中心或当地急救；不要用一句「会好的」打发。
+4. 建议最多两条，具体、可执行；用户不想听就停，不追问。
+5. 不制造依赖，不声称「只有我懂你」；鼓励用户回到现实关系。
+6. 可以轻松、有温度，但不要强行正能量。"""
+
+MEMORY_PROMPT = """当用户明确说「记住」或透露稳定的身份、偏好、计划、关系时，调用 memory 工具存下来。
+不要记录密码、身份证、银行卡等敏感信息；不要记录一次性的情绪或随口说的话。
+用户问「你记得我什么」时，用 memory list 查；记错了就用 memory delete 删掉。"""
+
 TOOL_PROMPT = """需要查时间、做算术、管理待办时，调用提供的工具。
+用户透露值得长期记住的信息时，调用 memory 工具。
 课程概念、课件内容、复习题这类问题，先调用 search_notes 检索本地资料，再回答。
 如果本地资料没有覆盖，或者问题涉及最新信息、用户明确要求联网，再调用 web_search。
 搜索顺序：能靠本地课件回答，就不要联网；联网结果只作为补充。
@@ -69,14 +84,25 @@ def build_system_prompt(
     now_text: str = "",
     course: str = "",
     teaching_stage: str | None = None,
+    emotion: str | None = None,
+    memories: str | None = None,
 ) -> str:
     parts = [BASE_PROMPT, MODE_PROMPTS.get(mode, MODE_PROMPTS["study"]), TOOL_PROMPT]
+    if mode == "life":
+        parts.append(LIFE_PROMPT)
     if teaching_stage and mode == "study":
         parts.append(build_teaching_prompt(teaching_stage, course))
     if course and mode == "study":
         parts.append(
             f"当前课程：{course}。检索和回答优先围绕这门课，不要串到别的科目。"
         )
+    if emotion and mode == "life":
+        from app.agent.emotion import emotion_hint
+
+        parts.append(emotion_hint(emotion))
+    if memories:
+        parts.append(memories)
+    parts.append(MEMORY_PROMPT)
     if now_text:
         parts.append(f"当前时间：{now_text}")
     return "\n".join(parts)

@@ -6,6 +6,7 @@ from typing import Any
 
 from app.tools.base import BaseTool, ToolError
 from app.tools.calculator import CalculatorTool
+from app.tools.memory import MemoryTool
 from app.tools.search_notes import SearchNotesTool
 from app.tools.time import TimeTool
 from app.tools.todo import TodoTool
@@ -17,6 +18,7 @@ _TOOL_LIST: list[BaseTool] = [
     TimeTool(),
     CalculatorTool(),
     TodoTool(),
+    MemoryTool(),
     SearchNotesTool(),
     WebSearchTool(),
 ]

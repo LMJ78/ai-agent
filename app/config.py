@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # 数据库
     database_url: str = DEFAULT_DATABASE_URL
 
+    # 待办提醒后台任务
+    reminder_worker_enabled: bool = True
+    reminder_scan_seconds: int = 30
+
     # 生成参数（第 6 周做配额时还会用到 max_tokens）
     temperature: float = 0.7
     max_tokens: int = 800

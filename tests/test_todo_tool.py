@@ -3,12 +3,14 @@
 import asyncio
 import re
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 
 from app.db.base import SessionLocal
 from app.db.init import init_db
 from app.db.models import Todo, User
+from app.tools.time import CHINA_TZ
 from app.tools.todo import TodoTool
 
 
@@ -61,6 +63,66 @@ def test_todo_crud_and_isolation() -> None:
         assert "已删除" in deleted
         with SessionLocal() as db:
             assert db.get(Todo, todo_id) is None
+    finally:
+        with SessionLocal() as db:
+            db.execute(delete(Todo).where(Todo.title.like(f"{title}%")))
+            db.commit()
+
+
+def test_todo_remind_fields_and_today_period() -> None:
+    user_id = _demo_user_id()
+    title = f"W4提醒测试-{uuid.uuid4().hex[:8]}"
+    today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+    tool = TodoTool()
+
+    try:
+        added = asyncio.run(
+            tool.run(
+                user_id,
+                {
+                    "action": "add",
+                    "title": title,
+                    "due_at": today,
+                    "remind_at": today,
+                },
+            )
+        )
+        assert "提醒：" in added
+        assert "09:00" in added  # 提醒只给日期时按 09:00，不是 23:59
+        todo_id = int(re.search(r"#(\d+)", added).group(1))
+
+        with SessionLocal() as db:
+            todo = db.get(Todo, todo_id)
+            assert todo is not None
+            assert todo.remind_at is not None
+            assert todo.remind_at.hour == 1  # UTC 01:00 = 北京 09:00
+
+        listed = asyncio.run(
+            tool.run(user_id, {"action": "list", "period": "today"})
+        )
+        assert title in listed
+
+        with SessionLocal() as db:
+            todo = db.get(Todo, todo_id)
+            todo.reminded_at = datetime.now(timezone.utc)
+            todo.remind_attempts = 2
+            db.commit()
+
+        updated = asyncio.run(
+            tool.run(
+                user_id,
+                {
+                    "action": "update",
+                    "todo_id": todo_id,
+                    "remind_at": f"{today} 18:00",
+                },
+            )
+        )
+        assert "18:00" in updated
+        with SessionLocal() as db:
+            todo = db.get(Todo, todo_id)
+            assert todo.reminded_at is None
+            assert todo.remind_attempts == 0
     finally:
         with SessionLocal() as db:
             db.execute(delete(Todo).where(Todo.title.like(f"{title}%")))

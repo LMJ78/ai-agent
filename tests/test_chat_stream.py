@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from app.api import chat as chat_module
+from app.config import settings
 from app.db.base import SessionLocal
 from app.db.models import ChatSession, Message
 from app.main import app
@@ -169,6 +170,34 @@ def test_teaching_stage_defaults_to_hint_then_answer(monkeypatch) -> None:
         assert "【答案】" in second_prompt
 
         client.delete(f"/api/questions/{question_id}")
+
+
+def test_life_mode_injects_memory_and_emotion(monkeypatch) -> None:
+    """生活模式要把长期记忆和情绪提示带进 system prompt。"""
+    monkeypatch.setattr(settings, "reminder_worker_enabled", False)
+    fake = FakeClient([_response(content="听起来你今天真的很累，先歇一会儿也可以。")])
+    monkeypatch.setattr(chat_module, "get_client", lambda: fake)
+
+    with TestClient(app) as client:
+        memory = client.post(
+            "/api/memories",
+            json={"content": "我不吃香菜", "kind": "preference"},
+        )
+        assert memory.status_code == 200
+        memory_id = memory.json()["id"]
+
+        resp = client.post(
+            "/api/chat",
+            json={"message": "今天好累，也好焦虑，记得我不吃香菜", "mode": "life"},
+        )
+        assert resp.status_code == 200
+        prompt = fake.chat.completions.calls[0]["messages"][0]["content"]
+        assert "我不吃香菜" in prompt
+        assert "焦虑" in prompt
+        assert "先接住" in prompt
+        assert "不诊断" in prompt
+
+        client.delete(f"/api/memories/{memory_id}")
 
 
 def test_chat_injects_confirmed_question(monkeypatch) -> None:
