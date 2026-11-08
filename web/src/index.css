@@ -1368,7 +1368,16 @@ a {
   }
 }
 
+/* 桌面端侧栏常驻，不需要关闭按钮；移动端才显示。 */
+.sidebar-close {
+  display: none;
+}
+
 @media (max-width: 900px) {
+  .sidebar-close {
+    display: inline-flex;
+  }
+
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;

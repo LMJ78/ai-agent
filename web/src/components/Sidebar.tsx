@@ -96,7 +96,7 @@ export function Sidebar({
             <div className="brand-name">伴学</div>
             <div className="brand-sub">AI 学习与生活助手</div>
           </div>
-          <button className="icon-btn" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="关闭侧边栏">
+          <button className="icon-btn sidebar-close" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="关闭侧边栏">
             <X size={16} />
           </button>
         </div>
