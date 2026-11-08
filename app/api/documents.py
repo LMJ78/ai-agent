@@ -3,12 +3,14 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.agent.vision import VisionError, VisionNotConfiguredError
 from app.core.deps import get_current_user
 from app.db.base import get_db
-from app.db.models import User
-from app.rag.ingest import delete_document, ingest_path, list_documents, save_upload
+from app.db.models import Chunk, User
+from app.rag.ingest import delete_document, ingest_path_async, list_documents, save_upload
 from app.rag.parser import ParseError
 
 router = APIRouter()
@@ -28,13 +30,21 @@ async def upload_document(
     saved_path: Path | None = None
     try:
         saved_path = save_upload(user.id, original, data)
-        document, chunk_count = ingest_path(
+        document, chunk_count = await ingest_path_async(
             user_id=user.id,
             path=saved_path,
             course=course.strip() or "未分类",
             chapter=chapter.strip(),
             original_filename=original,
         )
+    except VisionNotConfiguredError as exc:
+        if saved_path is not None:
+            saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except VisionError as exc:
+        if saved_path is not None:
+            saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except (ValueError, ParseError) as exc:
         if saved_path is not None:
             saved_path.unlink(missing_ok=True)
@@ -57,8 +67,19 @@ async def upload_document(
 @router.get("/documents")
 def get_documents(
     user: User = Depends(get_current_user),
-    _db: Session = Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> list[dict]:
+    docs = list_documents(user.id)
+    ids = [doc.id for doc in docs]
+    counts: dict[int, int] = {}
+    if ids:
+        rows = db.execute(
+            select(Chunk.document_id, func.count(Chunk.id))
+            .where(Chunk.document_id.in_(ids), Chunk.user_id == user.id)
+            .group_by(Chunk.document_id)
+        ).all()
+        counts = {document_id: count for document_id, count in rows}
+
     return [
         {
             "id": doc.id,
@@ -66,9 +87,10 @@ def get_documents(
             "course": doc.course,
             "chapter": doc.chapter,
             "status": doc.status,
+            "chunks": counts.get(doc.id, 0),
             "created_at": doc.created_at.isoformat() if doc.created_at else "",
         }
-        for doc in list_documents(user.id)
+        for doc in docs
     ]
 
 

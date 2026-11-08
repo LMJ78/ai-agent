@@ -5,6 +5,7 @@
 """
 
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,15 @@ def cookies():
 
 
 def cookie_get(name: str) -> str | None:
+    # Streamlit 的请求上下文能同步读到浏览器 Cookie，刷新后第一帧就可用。
+    # CookieController 的组件值要等一次 rerun 才回填，不能作为首选。
+    try:
+        value = st.context.cookies.get(name)
+        if value:
+            return value
+    except Exception:
+        pass
+
     c = cookies()
     if c is None:
         return None
@@ -74,6 +84,9 @@ def set_auth(data: dict) -> None:
     st.session_state.user = data["user"]
     st.session_state.auth_checked = True
     cookie_set(COOKIE_NAME, data["access_token"])
+    # CookieController 通过前端组件写 cookie，立即 rerun 会把组件卸载掉。
+    # 留一点时间让组件把 set 消息处理完，再刷新页面。
+    time.sleep(0.6)
     st.rerun()
 
 
@@ -90,17 +103,26 @@ def clear_auth() -> None:
 def restore_auth() -> None:
     if st.session_state.get("auth_checked"):
         return
-    st.session_state.auth_checked = True
+
     token = st.session_state.get("token") or cookie_get(COOKIE_NAME)
     if not token:
+        # 首次渲染时 CookieController 组件可能还没回填；给它一次 rerun 的机会。
+        if CookieController is not None and not st.session_state.get("_cookie_retry_done"):
+            st.session_state._cookie_retry_done = True
+            st.rerun()
+        st.session_state.auth_checked = True
         return
+
     try:
         user = request("GET", "/api/auth/me", token=token)
     except ApiError:
         cookie_remove(COOKIE_NAME)
+        st.session_state.auth_checked = True
         return
+
     st.session_state.token = token
     st.session_state.user = user
+    st.session_state.auth_checked = True
 
 
 def api_error(exc: ApiError) -> None:

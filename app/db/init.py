@@ -27,6 +27,15 @@ def _ensure_columns() -> None:
             if name not in columns:
                 conn.exec_driver_sql(statement)
 
+        question_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(questions)")
+        }
+        if "original_filename" not in question_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE questions ADD COLUMN original_filename VARCHAR(255) "
+                "NOT NULL DEFAULT ''"
+            )
+
 
 def init_db() -> None:
     """建表（已存在则跳过），并确保 demo 用户存在。

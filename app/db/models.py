@@ -154,6 +154,7 @@ class Question(Base):
     original_text: Mapped[str] = mapped_column(Text, default="")
     parsed_text: Mapped[str] = mapped_column(Text, default="")
     source_path: Mapped[str] = mapped_column(String(512), default="")
+    original_filename: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     confirmed_at: Mapped[datetime | None] = mapped_column(

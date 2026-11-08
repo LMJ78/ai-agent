@@ -2,8 +2,8 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**第 5 周（多用户 + Streamlit 前端）进行中**。
-本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；Streamlit 能登录、聊天、录题、看历史、管待办/记忆/推送。
+当前进度：**V3 前端 MVP（React）+ 扫描版 PDF OCR**。
+本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；React 前端能登录、聊天、按科目看历史、管知识库/题库；扫描版 PDF 上传后自动逐页 OCR 入库。
 
 ---
 
@@ -15,11 +15,12 @@
 | 注册 / 登录 | `POST /api/auth/register`（必须邀请码）/ `POST /api/auth/login`，bcrypt + JWT 7 天 |
 | 用户隔离 | 所有业务接口都从 `Authorization: Bearer <token>` 取当前用户；A 的会话/题目给 B → 404 |
 | 邀请码 | `scripts/create_invite.py` 生成一次性/多次邀请码 |
-| Streamlit 前端 | `ui/app.py`：登录、聊天、学习记录、录题、待办、记忆、推送设置 |
+| React 前端 | `web/`：登录/注册、聊天、按科目分组历史、知识库、题库；学习/生活双主题；原 Streamlit 保留在 `ui/` 作旧入口 |
 | `POST /api/chat` | 对话接口，SSE 返回 |
 | 工具循环 | 模型要调工具 → 执行 → 结果回填 → 再问，最多 5 轮 |
 | 六个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索）、`memory`（长期记忆） |
-| 课程资料 | 上传 PDF / DOCX / PPTX / MD / TXT，解析后存入 `chunks` 表 |
+| 课程资料 | 上传 PDF / DOCX / PPTX / MD / TXT，解析后存入 `chunks` 表；扫描版 PDF 自动逐页 OCR |
+| 扫描版 PDF OCR | 文字层为空时用 pypdfium2 渲染页面，Qwen-VL 逐页转写；默认最多 80 页、150 DPI |
 | 本地检索 | BM25 + 中文二元组分词；按 `user_id` / `course` 隔离，回答带 `[L1]` 出处 |
 | 科目维度 | 每个会话绑定一个 `course`；检索默认只查这门课，不再把不同科目混在一起 |
 | 学习记录 | `GET /api/sessions?course=...` 按科目列会话，`?q=...` 按关键词搜历史 |
@@ -39,11 +40,11 @@
 | 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
 | 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
-| 测试 | 55 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离 |
+| 测试 | 57 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、扫描 PDF OCR、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离 |
 
-> 已在 Python 3.14 + FastAPI 0.162 下验证：55 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
+> 已在 Python 3.14 + FastAPI 0.162 下验证：57 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
-> W5 已接邀请码注册、JWT 登录和 Streamlit 前端；生活记忆和 PushPlus 推送已实现，真实 PushPlus token 发送待验收。拍照转写和联网检索已用真实 Key 跑通：`w3_acceptance.py` 的 10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。注意这 10 张是 PIL 生成的印刷体，不是手机实拍；手机照片可用 `check_w3_extras.py --image` 单独验证。
+> V3 前端已用 React + Vite 重写；扫描版 PDF 已用 PIL 生成的图片型 PDF 跑通真实 OCR（1 页入库）。W5 的邀请码、JWT、用户隔离；W3 的拍照与联网验收仍有效：10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。
 
 ---
 
@@ -130,7 +131,7 @@ uvicorn app.main:app --reload
 - 接口文档：<http://127.0.0.1:8000/docs>
 - 健康检查：<http://127.0.0.1:8000/health>
 
-### 3.5 注册、登录与前端（W5）
+### 3.5 注册、登录与 React 前端
 
 **先生成一个邀请码**（另开一个窗口，在 `ai-agent` 目录下）：
 
@@ -155,17 +156,22 @@ $headers = @{ Authorization = "Bearer $token" }
 
 之后所有 `/api/*` 业务接口都要带 `-Headers $headers`。没带或 token 过期会返回 **401**。
 
-**启动 Streamlit 前端**（再开一个窗口，仍在 `ai-agent` 目录）：
+**启动 React 前端**（再开一个窗口，进入 `web/`）：
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run ui/app.py
+cd web
+pnpm install
+pnpm dev
 ```
 
-浏览器打开 <http://127.0.0.1:8501>。用刚才注册的账号登录；刷新页面会通过 cookie 保留登录状态。
-左侧可以切换：聊天 / 学习记录 / 录题 / 待办 / 记忆 / 推送设置。
+浏览器打开 <http://127.0.0.1:5173>。用刚才注册的账号登录；token 存在 localStorage，刷新不会掉登录。
+页面：聊天、按科目分组的会话历史、知识库、题库；右上角切换学习/生活模式。
 
-> 前端默认连 `http://127.0.0.1:8000`。如果后端换了地址：
-> `$env:API_BASE_URL="http://127.0.0.1:8001"; streamlit run ui/app.py`。
+> `pnpm dev` 会把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`，所以先启动后端。
+> 生产构建：`pnpm build`，产物在 `web/dist/`。
+>
+> 旧 Streamlit 入口仍在 `ui/app.py`，命令是
+> `.\.venv\Scripts\python.exe -m streamlit run ui/app.py`（8501），仅作兼容保留。
 
 ### 4. 试一次对话
 
@@ -422,7 +428,10 @@ ai-agent/
 │   ├── api/questions.py   # 题目粘贴/上传/转写/确认
 │   ├── api/quizzes.py     # L3 自测出题/判分
 │   ├── api/sessions.py    # 学习记录：按科目筛选、回看
-│   ├── core/deps.py       # 当前用户（W1 固定 demo）
+│   ├── api/auth.py        # 注册/登录/当前用户
+│   ├── api/todos.py       # 待办 CRUD
+│   ├── api/courses.py     # 按科目汇总
+│   ├── core/deps.py       # 当前用户（JWT Bearer）
 │   ├── agent/
 │   │   ├── llm.py         # DeepSeek 客户端
 │   │   ├── vision.py      # Qwen-VL 图片转写
@@ -436,7 +445,7 @@ ai-agent/
 │   │   ├── search_notes.py# 课程资料检索
 │   │   └── web_search.py  # Tavily 联网检索
 │   ├── rag/
-│   │   ├── parser.py      # PDF/PPTX/DOCX/MD/TXT 解析
+│   │   ├── parser.py      # PDF/PPTX/DOCX/MD/TXT 解析；扫描 PDF 走 OCR
 │   │   ├── tokenizer.py   # 中文二元组分词
 │   │   ├── retriever.py   # BM25 检索
 │   │   └── ingest.py      # 入库（documents + chunks）
@@ -444,6 +453,11 @@ ai-agent/
 │       ├── base.py        # 引擎、Session、WAL
 │       ├── models.py      # 所有表
 │       └── init.py        # 建表 + demo 用户
+├── web/                   # React + Vite 前端（V3 主入口）
+│   ├── src/components/    # 侧栏、聊天、Markdown
+│   ├── src/pages/         # 登录、知识库、题库
+│   └── src/lib/api.ts     # Bearer + SSE 封装
+├── ui/                    # 旧 Streamlit 入口（兼容保留）
 ├── scripts/
 │   ├── ingest_course.py   # 批量导入课件
 │   └── check_w3_extras.py # 拍照/联网 Key 与真实调用自检

@@ -9,11 +9,13 @@ import logging
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
+from app.api.courses import router as courses_router
 from app.api.documents import router as documents_router
 from app.api.memories import router as memories_router
 from app.api.push import router as push_router
@@ -59,12 +61,22 @@ app = FastAPI(
 app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(documents_router, prefix="/api", tags=["documents"])
+app.include_router(courses_router, prefix="/api", tags=["courses"])
 app.include_router(sessions_router, prefix="/api", tags=["sessions"])
 app.include_router(questions_router, prefix="/api", tags=["questions"])
 app.include_router(quizzes_router, prefix="/api", tags=["quizzes"])
 app.include_router(memories_router, prefix="/api", tags=["memories"])
 app.include_router(push_router, prefix="/api", tags=["push"])
 app.include_router(todos_router, prefix="/api", tags=["todos"])
+
+# React 开发服务器（Vite）直接请求 8000 时使用；生产同源部署不需要。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in settings.frontend_origins.split(",") if origin.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["system"])

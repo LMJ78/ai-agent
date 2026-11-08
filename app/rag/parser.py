@@ -3,10 +3,14 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import tempfile
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from pptx import Presentation
+
+from app.agent.vision import PAGE_OCR_PROMPT, transcribe_image
+from app.config import settings
 
 
 class ParseError(Exception):
@@ -94,6 +98,49 @@ def _parse_pdf(path: Path) -> list[ParsedChunk]:
     return chunks
 
 
+async def _parse_pdf_ocr(path: Path) -> list[ParsedChunk]:
+    """扫描版 PDF：逐页渲染成图，交给视觉模型转写。"""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as exc:
+        raise ParseError(
+            "扫描版 PDF 需要 pypdfium2；请先运行 pip install pypdfium2"
+        ) from exc
+
+    max_pages = max(1, settings.vision_ocr_max_pages)
+    dpi = max(96, min(200, settings.vision_ocr_dpi))
+
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        page_count = len(pdf)
+        if page_count == 0:
+            raise ParseError("PDF 是空的")
+        if page_count > max_pages:
+            raise ParseError(
+                f"扫描版 PDF 共 {page_count} 页，超过 OCR 上限 {max_pages} 页；"
+                "请拆成小份后再传，避免一次等太久和消耗过多额度"
+            )
+
+        chunks: list[ParsedChunk] = []
+        with tempfile.TemporaryDirectory(prefix="ocr-") as temp_dir:
+            for index in range(page_count):
+                page = pdf[index]
+                bitmap = page.render(scale=dpi / 72)
+                image = bitmap.to_pil()
+                image_path = Path(temp_dir) / f"page-{index + 1}.png"
+                image.save(image_path, format="PNG")
+
+                text = await transcribe_image(image_path, prompt=PAGE_OCR_PROMPT)
+                for piece in split_text(text):
+                    chunks.append(ParsedChunk(piece, f"第 {index + 1} 页"))
+
+        if not chunks:
+            raise ParseError("扫描版 PDF 没有识别出可用文字")
+        return chunks
+    finally:
+        pdf.close()
+
+
 def _parse_docx(path: Path) -> list[ParsedChunk]:
     doc = DocxDocument(str(path))
     parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
@@ -128,3 +175,16 @@ def parse_file(path: Path) -> list[ParsedChunk]:
     if suffix in {".md", ".txt"}:
         return _parse_text(path)
     raise ParseError(f"不支持的文件类型：{suffix}")
+
+
+async def parse_file_async(path: Path) -> list[ParsedChunk]:
+    """上传入库用：文字版 PDF 走原解析，扫描版自动转 OCR。"""
+    if path.suffix.lower() != ".pdf":
+        return parse_file(path)
+
+    try:
+        return _parse_pdf(path)
+    except ParseError as exc:
+        if "没有文字层" not in str(exc):
+            raise
+        return await _parse_pdf_ocr(path)

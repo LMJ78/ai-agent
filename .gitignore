@@ -26,6 +26,15 @@ pip-log*.txt
 pytest-cache-files-*
 pytest-of-*/
 
+# 前端构建产物 / 本地冒烟
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+web/.tmp-ui-*.mjs
+web/ui-*.png
+
 # 编辑器 / 系统
 .idea/
 .vscode/

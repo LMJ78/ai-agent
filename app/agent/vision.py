@@ -33,6 +33,13 @@ VISION_PROMPT = """你是一个题目转写助手。只转写图片里可见的�
 3. 图片模糊或看不清的地方写 [看不清]，不要猜；
 4. 只输出转写结果，不要加“以下是题目”之类的说明。"""
 
+PAGE_OCR_PROMPT = """你是一个课件 OCR 助手。只转写这一页里可见的文字，不要解答，不要总结。
+要求：
+1. 按阅读顺序保留标题、编号、列表、表格文字；
+2. 数学公式用 LaTeX，行内公式用 $...$；
+3. 图片、流程图里的文字尽量转写，看不清写 [看不清]，不要猜；
+4. 只输出转写结果，不要加“以下是第几页”之类的说明。"""
+
 
 @lru_cache
 def get_vision_client() -> AsyncOpenAI:
@@ -78,8 +85,8 @@ def _clean_text(text: str) -> str:
     return text
 
 
-async def transcribe_image(path: Path) -> str:
-    """调用视觉模型，返回图片里的题目文字。"""
+async def transcribe_image(path: Path, prompt: str = VISION_PROMPT) -> str:
+    """调用视觉模型，返回图片里的文字；prompt 可换成课件整页转写。"""
     client = get_vision_client()
     data_url = _image_data_url(path)
 
@@ -90,7 +97,7 @@ async def transcribe_image(path: Path) -> str:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": VISION_PROMPT},
+                        {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
                 }

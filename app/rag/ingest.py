@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from app.config import DATA_DIR
 from app.db.base import SessionLocal
 from app.db.models import Chunk, Document
-from app.rag.parser import ParseError, parse_file
+from app.rag.parser import ParseError, ParsedChunk, parse_file, parse_file_async
 from app.rag.tokenizer import tokenize
 
 UPLOAD_DIR = DATA_DIR / "uploads"
@@ -39,8 +39,43 @@ def ingest_path(
     chapter: str = "",
     original_filename: str | None = None,
 ) -> tuple[Document, int]:
-    """解析文件并入库，返回 (Document, chunk 数)。"""
-    parsed = parse_file(path)
+    """同步解析并入库（文字版课件/测试用）。"""
+    return _store_parsed(
+        user_id=user_id,
+        path=path,
+        course=course,
+        chapter=chapter,
+        original_filename=original_filename,
+        parsed=parse_file(path),
+    )
+
+
+async def ingest_path_async(
+    user_id: int,
+    path: Path,
+    course: str,
+    chapter: str = "",
+    original_filename: str | None = None,
+) -> tuple[Document, int]:
+    """上传接口用：扫描版 PDF 会逐页 OCR，不阻塞事件循环。"""
+    return _store_parsed(
+        user_id=user_id,
+        path=path,
+        course=course,
+        chapter=chapter,
+        original_filename=original_filename,
+        parsed=await parse_file_async(path),
+    )
+
+
+def _store_parsed(
+    user_id: int,
+    path: Path,
+    course: str,
+    chapter: str,
+    original_filename: str | None,
+    parsed: list[ParsedChunk],
+) -> tuple[Document, int]:
     if not parsed:
         raise ParseError("没有解析出可用的文字")
 

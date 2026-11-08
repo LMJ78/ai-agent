@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     tavily_base_url: str = "https://api.tavily.com"
     web_search_max_results: int = 5
 
+    # 扫描版 PDF OCR：用视觉模型逐页转写。页数要设上限，否则 729 页会跑很久。
+    vision_ocr_max_pages: int = 80
+    vision_ocr_dpi: int = 150
+
+    # 新前端（Vite）开发地址；生产环境同源部署时不依赖这个。
+    frontend_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+
     # 登录 / JWT（第 5 周）
     # 本地开发可以先用默认值；上线前必须在 .env 里换成随机长字符串。
     jwt_secret: str = "dev-only-change-me-please-set-JWT_SECRET"

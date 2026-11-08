@@ -6,10 +6,12 @@
 这样拍照识别错了不会直接拿去讲，避免“一本正经地讲错题”。
 """
 
+import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -61,6 +63,8 @@ def _question_dict(question: Question) -> dict:
         "parsed_text": question.parsed_text,
         # 前端确认卡片用它显示原图；只返回自己的题，不泄露别人路径。
         "source_path": question.source_path,
+        "original_filename": question.original_filename,
+        "has_file": bool(question.source_path),
         "status": question.status,
         "needs_confirmation": question.status != "confirmed",
         "created_at": question.created_at.isoformat() if question.created_at else "",
@@ -124,6 +128,7 @@ def _create(
     original_text: str,
     parsed_text: str,
     source_path: str = "",
+    original_filename: str = "",
 ) -> Question:
     question = Question(
         user_id=user_id,
@@ -134,6 +139,7 @@ def _create(
         original_text=_truncate(original_text),
         parsed_text=_truncate(parsed_text),
         source_path=source_path[:512],
+        original_filename=(original_filename or "")[:255],
         status="draft",
     )
     db.add(question)
@@ -243,6 +249,7 @@ async def upload_question(
         original_text=original_text,
         parsed_text=parsed_text,
         source_path=str(saved_path),
+        original_filename=original,
     )
     return _question_dict(question)
 
@@ -251,7 +258,9 @@ async def upload_question(
 def list_questions(
     course: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[dict]:
@@ -260,8 +269,40 @@ def list_questions(
         stmt = stmt.where(Question.course == course)
     if status:
         stmt = stmt.where(Question.status == status)
-    rows = db.scalars(stmt.order_by(Question.id.desc()).limit(limit)).all()
+    if source_type:
+        stmt = stmt.where(Question.source_type == source_type)
+    rows = db.scalars(
+        stmt.order_by(Question.id.desc()).offset(offset).limit(limit)
+    ).all()
     return [_question_dict(item) for item in rows]
+
+
+@router.get("/questions/{question_id}/file")
+def get_question_file(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """题目原图/原文件，只允许本人读取。"""
+    question = _get_own(db, user.id, question_id)
+    if not question.source_path:
+        raise HTTPException(status_code=404, detail="这道题没有原文件")
+
+    path = Path(question.source_path)
+    try:
+        path.resolve().relative_to(QUESTION_DIR.resolve())
+    except (OSError, ValueError):
+        raise HTTPException(status_code=404, detail="原文件路径无效") from None
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="原文件已不存在")
+
+    media_type = mimetypes.guess_type(question.original_filename or path.name)[0]
+    return FileResponse(
+        path,
+        media_type=media_type or "application/octet-stream",
+        filename=question.original_filename or path.name,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/questions/{question_id}")
