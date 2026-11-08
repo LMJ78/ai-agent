@@ -685,13 +685,17 @@ git config --global --list
 
 ### 提交记录
 
-仓库已经初始化过，W1 到 W4 的提交是：
+仓库从 W1 到 V3 的主要提交是：
 
 ```text
+3a41b09 fix(ui): 桌面端隐藏侧栏关闭按钮
+5bf806e V3: React 前端与扫描版 PDF OCR
+dbf286b fix(ui): 录题确认后用 pending_nav 跳转
+4613ffd W5: 多用户 JWT 鉴权、邀请码与 Streamlit 前端
+e7e569f W4: 完成十题与 PushPlus 验收，补验收脚本
 6db1956 W4: 生活模式、长期记忆、待办提醒与 PushPlus
 4b28486 W4: 解题老师三阶段提示 + W3 复盘
 321ecec W3: 完成拍照与问题验收，修复视觉模型名
-bff02f8 docs: 更新 README 提交记录
 851dfb3 W2/W3: 工具循环、本地 RAG、题目与联网检索
 42cad00 W1: FastAPI 骨架与流式对话
 ```
