@@ -271,7 +271,8 @@ class ReviewItem(Base):
     chapter: Mapped[str] = mapped_column(String(64), default="")
     question: Mapped[str] = mapped_column(Text)
     options: Mapped[str] = mapped_column(Text, default="[]")
-    answer: Mapped[str] = mapped_column(String(16), default="")
+    # 选择题存 A/B/C/D；从聊天手动加入的「回忆卡」可以存整段参考答案。
+    answer: Mapped[str] = mapped_column(Text, default="")
     explanation: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(255), default="")
     quiz_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)

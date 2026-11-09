@@ -114,6 +114,7 @@ export type ReviewItem = {
   id: number;
   course: string;
   chapter: string;
+  kind: "choice" | "recall";
   question: string;
   options: string[];
   answer: string;

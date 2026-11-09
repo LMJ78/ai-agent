@@ -11,6 +11,7 @@ export function ReviewPage() {
   const [filter, setFilter] = useState<Filter>("due");
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [results, setResults] = useState<Record<number, { is_correct: boolean; correct_answer: string; explanation: string }>>({});
 
   const load = async (next: Filter = filter) => {
@@ -29,6 +30,7 @@ export function ReviewPage() {
       setItems(list);
       setStats(summary);
       setResults({});
+      setRevealed({});
     } finally {
       setLoading(false);
     }
@@ -54,13 +56,26 @@ export function ReviewPage() {
     window.setTimeout(() => void load(filter), 900);
   };
 
+  const selfCheck = async (item: ReviewItem, result: "correct" | "wrong") => {
+    const data = await api<{
+      is_correct: boolean;
+      correct_answer: string;
+      explanation: string;
+    }>(`/api/review/items/${item.id}/self-check`, {
+      method: "POST",
+      body: JSON.stringify({ result })
+    });
+    setResults((prev) => ({ ...prev, [item.id]: data }));
+    window.setTimeout(() => void load(filter), 900);
+  };
+
   return (
     <div className="page">
       <div className="page-inner">
         <div className="page-head">
           <div>
             <h1>错题本</h1>
-            <p>答错的自测题会回到这里，按 3 / 7 / 14 / 30 天的间隔复习。</p>
+            <p>自测答错会自动收录；聊天讲解完也可以手动加入。按 3 / 7 / 14 / 30 天复习。</p>
           </div>
           <span className="badge">{stats ? `${stats.active} 道待掌握` : ""}</span>
         </div>
@@ -122,7 +137,7 @@ export function ReviewPage() {
           <div className="card empty-card">
             <Brain size={28} />
             <strong>这里还没有错题</strong>
-            <span>去题库做一套自测，答错的题会自动进来。</span>
+            <span>去题库做自测，答错会自动进来；聊天回答下方也能点「加入错题本」。</span>
           </div>
         ) : (
           <div className="review-list">
@@ -149,31 +164,52 @@ export function ReviewPage() {
                   </div>
                   <h3>{item.question}</h3>
                   {item.source && <p className="faint review-source">{item.source}</p>}
-                  <div className="option-list">
-                    {item.options.map((option, index) => {
-                      const letter = String.fromCharCode(65 + index);
-                      const selected = answers[item.id] === letter;
-                      return (
-                        <button
-                          key={letter}
-                          className={`option ${selected ? "selected" : ""}`}
-                          onClick={() => setAnswers((prev) => ({ ...prev, [item.id]: letter }))}
-                          disabled={Boolean(result)}
-                        >
-                          <b>{letter}</b>
-                          <span>{option}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {item.options.length > 0 ? (
+                    <div className="option-list">
+                      {item.options.map((option, index) => {
+                        const letter = String.fromCharCode(65 + index);
+                        const selected = answers[item.id] === letter;
+                        return (
+                          <button
+                            key={letter}
+                            className={`option ${selected ? "selected" : ""}`}
+                            onClick={() => setAnswers((prev) => ({ ...prev, [item.id]: letter }))}
+                            disabled={Boolean(result)}
+                          >
+                            <b>{letter}</b>
+                            <span>{option}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="recall-box">
+                      {!revealed[item.id] && !result ? (
+                        <p className="faint">先自己在心里过一遍，再点开参考答案。</p>
+                      ) : (
+                        <div className="recall-answer">
+                          <span className="faint">参考答案</span>
+                          <p>{item.answer || "这道题没有填写参考答案，按你的理解自评即可。"}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {result && (
                     <div className={`review-result ${result.is_correct ? "ok" : "bad"}`}>
-                      <strong>{result.is_correct ? "答对了" : `答错了，正确答案 ${result.correct_answer}`}</strong>
+                      <strong>
+                        {item.options.length > 0
+                          ? result.is_correct
+                            ? "答对了"
+                            : `答错了，正确答案 ${result.correct_answer}`
+                          : result.is_correct
+                            ? "记住了，间隔会拉长"
+                            : "这次没记住，明天再来一次"}
+                      </strong>
                       {result.explanation && <p>{result.explanation}</p>}
                     </div>
                   )}
                   <div className="review-actions">
-                    {!result && (
+                    {!result && item.options.length > 0 && (
                       <button
                         className="btn primary"
                         disabled={!answers[item.id]}
@@ -181,6 +217,24 @@ export function ReviewPage() {
                       >
                         <Check size={14} /> 提交答案
                       </button>
+                    )}
+                    {!result && item.options.length === 0 && !revealed[item.id] && (
+                      <button
+                        className="btn ghost"
+                        onClick={() => setRevealed((prev) => ({ ...prev, [item.id]: true }))}
+                      >
+                        显示参考答案
+                      </button>
+                    )}
+                    {!result && item.options.length === 0 && revealed[item.id] && (
+                      <>
+                        <button className="btn primary" onClick={() => void selfCheck(item, "correct")}>
+                          <Check size={14} /> 我记住了
+                        </button>
+                        <button className="btn ghost" onClick={() => void selfCheck(item, "wrong")}>
+                          没记住
+                        </button>
+                      </>
                     )}
                     {result && <span className="faint">已记录，稍后刷新复习计划</span>}
                   </div>

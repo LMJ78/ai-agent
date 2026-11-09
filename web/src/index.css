@@ -2264,3 +2264,94 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* 聊天回答手动加入错题本 */
+.message-actions.always {
+  opacity: 1;
+}
+
+.message-actions .review-add {
+  color: var(--accent);
+}
+
+.message-actions .review-add.saved {
+  color: var(--ok, #34d399);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(3, 7, 14, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.review-save-modal {
+  width: min(720px, 100%);
+}
+
+.review-save-modal .field-label {
+  display: block;
+  margin: 12px 0 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.review-save-modal .field-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 9px 10px;
+  outline: 0;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.review-save-modal .field-input:focus {
+  border-color: var(--accent);
+}
+
+.review-save-modal .review-textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.review-save-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.recall-box {
+  margin-top: 10px;
+}
+
+.recall-answer {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+
+.recall-answer > span {
+  font-size: 10.5px;
+}
+
+.recall-answer p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .review-save-row {
+    grid-template-columns: 1fr;
+  }
+}

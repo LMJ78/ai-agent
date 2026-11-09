@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
+  BookmarkPlus,
   BookOpen,
   Coffee,
   Copy,
@@ -22,8 +23,16 @@ import type {
 } from "../types";
 import { Markdown } from "./Markdown";
 
-type UiMessage = ChatMessage & { key: string };
+type UiMessage = ChatMessage & { key: string; questionText?: string };
 type Stage = "auto" | "hint" | "step" | "answer";
+type ReviewDraft = {
+  question: string;
+  answer: string;
+  explanation: string;
+  course: string;
+  chapter: string;
+  source: string;
+};
 
 type Props = {
   mode: "study" | "life";
@@ -79,6 +88,11 @@ export function ChatView({
   const [stage, setStage] = useState<Stage>("auto");
   const [feynman, setFeynman] = useState(false);
   const [preview, setPreview] = useState<Citation | null>(null);
+  const [reviewDraft, setReviewDraft] = useState<ReviewDraft | null>(null);
+  const [reviewTargetKey, setReviewTargetKey] = useState<string | null>(null);
+  const [reviewSaved, setReviewSaved] = useState<Record<string, boolean>>({});
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState<number | null>(activeSession?.id ?? null);
@@ -179,6 +193,7 @@ export function ChatView({
       content: "",
       trace: [],
       pending: true,
+      questionText: activeQuestion?.parsed_text || text || undefined,
       created_at: new Date().toISOString()
     };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -256,6 +271,48 @@ export function ChatView({
       await navigator.clipboard.writeText(content);
     } catch {
       // 浏览器不允许时静默失败，不打断对话
+    }
+  };
+
+  const openReviewDraft = (message: UiMessage) => {
+    const index = messages.findIndex((item) => item.key === message.key);
+    const previousUser = [...messages.slice(0, index)]
+      .reverse()
+      .find((item) => item.role === "user");
+    setReviewDraft({
+      question: message.questionText || previousUser?.content || "",
+      answer: message.content,
+      explanation: "",
+      course: currentCourse,
+      chapter: "",
+      source: "聊天 · 手动加入"
+    });
+    setReviewTargetKey(message.key);
+    setReviewError("");
+  };
+
+  const saveReview = async () => {
+    if (!reviewDraft) return;
+    if (!reviewDraft.question.trim()) {
+      setReviewError("题目不能为空，补一句题干再保存。");
+      return;
+    }
+    setReviewSaving(true);
+    setReviewError("");
+    try {
+      await api("/api/review/items", {
+        method: "POST",
+        body: JSON.stringify({ ...reviewDraft, options: [] })
+      });
+      if (reviewTargetKey) {
+        setReviewSaved((prev) => ({ ...prev, [reviewTargetKey]: true }));
+      }
+      setReviewDraft(null);
+      setReviewTargetKey(null);
+    } catch (err: unknown) {
+      setReviewError(err instanceof Error ? err.message : "加入错题本失败");
+    } finally {
+      setReviewSaving(false);
     }
   };
 
@@ -366,11 +423,20 @@ export function ChatView({
                       </div>
                     )}
                     {message.role === "assistant" && message.content && !message.pending && (
-                      <div className="message-actions">
+                      <div className={`message-actions ${mode === "study" ? "always" : ""}`}>
                         <button onClick={() => copy(message.content)}>
                           <Copy size={11} style={{ marginRight: 4 }} />
                           复制
                         </button>
+                        {mode === "study" && (
+                          <button
+                            className={reviewSaved[message.key] ? "review-add saved" : "review-add"}
+                            onClick={() => openReviewDraft(message)}
+                          >
+                            <BookmarkPlus size={11} style={{ marginRight: 4 }} />
+                            {reviewSaved[message.key] ? "已加入错题本" : "加入错题本"}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -488,6 +554,77 @@ export function ChatView({
                   <FileText size={14} /> 打开原文件
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reviewDraft && (
+        <div className="modal-backdrop" onClick={() => setReviewDraft(null)}>
+          <div className="modal review-save-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h3>加入错题本</h3>
+                <p className="faint">保存成一张复习卡，之后在错题本按 3 / 7 / 14 / 30 天复习。</p>
+              </div>
+              <button className="icon-btn" onClick={() => setReviewDraft(null)} aria-label="关闭">
+                <X size={15} />
+              </button>
+            </div>
+
+            {reviewError && <div className="error-banner">{reviewError}</div>}
+
+            <label className="field-label">题目</label>
+            <textarea
+              className="field-input review-textarea"
+              rows={5}
+              value={reviewDraft.question}
+              onChange={(event) => setReviewDraft({ ...reviewDraft, question: event.target.value })}
+            />
+
+            <label className="field-label">参考答案（可留空，自己回忆时用）</label>
+            <textarea
+              className="field-input review-textarea"
+              rows={4}
+              value={reviewDraft.answer}
+              onChange={(event) => setReviewDraft({ ...reviewDraft, answer: event.target.value })}
+            />
+
+            <label className="field-label">解析（可留空）</label>
+            <textarea
+              className="field-input review-textarea"
+              rows={3}
+              value={reviewDraft.explanation}
+              onChange={(event) => setReviewDraft({ ...reviewDraft, explanation: event.target.value })}
+            />
+
+            <div className="review-save-row">
+              <div>
+                <label className="field-label">科目</label>
+                <input
+                  className="field-input"
+                  value={reviewDraft.course}
+                  onChange={(event) => setReviewDraft({ ...reviewDraft, course: event.target.value })}
+                />
+              </div>
+              <div>
+                <label className="field-label">章节（可选）</label>
+                <input
+                  className="field-input"
+                  value={reviewDraft.chapter}
+                  onChange={(event) => setReviewDraft({ ...reviewDraft, chapter: event.target.value })}
+                  placeholder="例如：第 3 章 动态规划"
+                />
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn ghost" onClick={() => setReviewDraft(null)}>
+                取消
+              </button>
+              <button className="btn primary" onClick={() => void saveReview()} disabled={reviewSaving}>
+                <BookmarkPlus size={14} /> {reviewSaving ? "保存中…" : "保存到错题本"}
+              </button>
             </div>
           </div>
         </div>

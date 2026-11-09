@@ -102,6 +102,50 @@ def test_review_flow_from_wrong_quiz_answer() -> None:
             db.commit()
 
 
+def test_manual_review_item_is_recall_and_self_checks() -> None:
+    prefix = f"W6手录-{uuid.uuid4().hex[:6]}"
+    _cleanup(prefix)
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/api/review/items",
+                json={
+                    "question": "手写一张最大子段和的复习卡",
+                    "answer": "维护以 i 结尾的最大和，遇到负数就重置。",
+                    "course": prefix,
+                    "chapter": "动态规划",
+                    "source": "聊天 · 手动加入",
+                },
+            )
+            assert created.status_code == 201
+            body = created.json()
+            assert body["kind"] == "recall"
+            assert body["created"] is True
+            item_id = body["id"]
+
+            duplicate = client.post(
+                "/api/review/items",
+                json={"question": "手写一张最大子段和的复习卡", "course": prefix},
+            )
+            assert duplicate.status_code == 201
+            assert duplicate.json()["created"] is False
+            assert duplicate.json()["id"] == item_id
+
+            rejected = client.post(
+                f"/api/review/items/{item_id}/answer", json={"answer": "A"}
+            )
+            assert rejected.status_code == 400
+
+            checked = client.post(
+                f"/api/review/items/{item_id}/self-check", json={"result": "correct"}
+            )
+            assert checked.status_code == 200
+            assert checked.json()["is_correct"] is True
+            assert checked.json()["next_review_at"]
+    finally:
+        _cleanup(prefix)
+
+
 def test_weekly_event_infers_weekday_and_expands() -> None:
     prefix = f"W6日程-{uuid.uuid4().hex[:6]}"
     _cleanup(prefix)
