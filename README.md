@@ -701,6 +701,8 @@ git config --global --list
 仓库从 W1 到 V3 的主要提交是：
 
 ```text
+661b04b feat(ui): 侧边栏折叠、学习生活历史隔离与删除
+4f50aca docs: 补 V3 提交记录
 3a41b09 fix(ui): 桌面端隐藏侧栏关闭按钮
 5bf806e V3: React 前端与扫描版 PDF OCR
 dbf286b fix(ui): 录题确认后用 pending_nav 跳转
