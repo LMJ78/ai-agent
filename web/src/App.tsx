@@ -207,6 +207,7 @@ export default function App() {
         sessions={sessions}
         activeSessionId={activeSession?.id ?? null}
         activePage={page}
+        mode={mode}
         open={sidebarOpen}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((value) => !value)}

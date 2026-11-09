@@ -3,7 +3,7 @@
 工具调用和这里共用同一张 todos 表；所有查询都带 user_id。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -32,7 +32,12 @@ class TodoUpdate(BaseModel):
 
 
 def _iso(value: datetime | None) -> str:
-    return value.isoformat() if value else ""
+    if value is None:
+        return ""
+    # SQLite 里的 datetime 是 naive UTC；补上时区，前端才不会当成本地时间。
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def _todo_dict(todo: Todo) -> dict:

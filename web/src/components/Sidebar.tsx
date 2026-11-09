@@ -15,6 +15,7 @@ import {
   X
 } from "lucide-react";
 import type { ChatSession, User } from "../types";
+import { LifeTodoCard } from "./LifeTodoCard";
 
 export type PageKey = "chat" | "knowledge" | "questions";
 
@@ -23,6 +24,7 @@ type Props = {
   sessions: ChatSession[];
   activeSessionId: number | null;
   activePage: PageKey;
+  mode: "study" | "life";
   open: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -58,6 +60,7 @@ export function Sidebar({
   sessions,
   activeSessionId,
   activePage,
+  mode,
   open,
   collapsed,
   onToggleCollapse,
@@ -191,6 +194,8 @@ export function Sidebar({
           );
         })}
       </div>
+
+      {mode === "life" && <LifeTodoCard />}
 
       <nav className="sidebar-nav">
         {PAGE_ITEMS.map((item) => {

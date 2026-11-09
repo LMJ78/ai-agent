@@ -78,7 +78,7 @@ export type TodoItem = {
   due_at: string | null;
   remind_at: string | null;
   reminded_at: string | null;
-  completed: boolean;
+  done: boolean;
   created_at: string;
 };
 

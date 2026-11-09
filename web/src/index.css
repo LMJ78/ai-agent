@@ -1373,6 +1373,186 @@ a {
   display: none;
 }
 
+/* ---------- 生活模式：今日待办卡 ---------- */
+
+.life-todos {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 10px 10px;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 70%);
+}
+
+.life-todos-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 2px;
+}
+
+.life-todos-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.life-todos-title svg {
+  color: var(--accent);
+}
+
+.life-todos-count {
+  font-size: 10px;
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 99px;
+  padding: 2px 6px;
+}
+
+.life-todos-toggle {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  height: 24px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  border-radius: 7px;
+}
+
+.life-todos-toggle:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.life-todo-add {
+  display: flex;
+  gap: 6px;
+}
+
+.life-todo-add input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 8px 9px;
+  font-size: 12px;
+  outline: none;
+}
+
+.life-todo-add input:focus {
+  border-color: var(--accent);
+}
+
+.life-todo-add button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--accent);
+}
+
+.life-todo-add button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.life-todo-add button:disabled {
+  opacity: 0.45;
+}
+
+.life-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.life-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 7px 7px 5px;
+  border-radius: 8px;
+}
+
+.life-todo-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.life-todo-check {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: transparent;
+}
+
+.life-todo-check:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.life-todo-check:disabled {
+  opacity: 0.6;
+}
+
+.life-todo-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.life-todo-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.life-todo-due {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.life-todo-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 8px;
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+.life-todo-error {
+  font-size: 11px;
+  color: #ff9b9b;
+  padding: 0 2px;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- 侧栏折叠 / 历史删除 ---------- */
 
 .sidebar {
@@ -1407,6 +1587,7 @@ a {
 .sidebar.collapsed .sidebar-collapse,
 .sidebar.collapsed .search-box,
 .sidebar.collapsed .session-groups,
+.sidebar.collapsed .life-todos,
 .sidebar.collapsed .nav-label,
 .sidebar.collapsed .user-meta {
   display: none;
@@ -1510,6 +1691,10 @@ a {
   .sidebar.collapsed .session-groups,
   .sidebar.collapsed .user-meta {
     display: block;
+  }
+
+  .sidebar.collapsed .life-todos {
+    display: flex;
   }
 
   .sidebar.collapsed .search-box {
