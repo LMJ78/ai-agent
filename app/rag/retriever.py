@@ -18,6 +18,7 @@ from app.rag.tokenizer import tokenize
 @dataclass
 class RetrievedChunk:
     chunk_id: int
+    document_id: int
     text: str
     filename: str
     course: str
@@ -94,6 +95,7 @@ def search_chunks(
     return [
         RetrievedChunk(
             chunk_id=row.id,
+            document_id=row.document_id,
             text=row.text,
             filename=row.filename,
             course=row.course,

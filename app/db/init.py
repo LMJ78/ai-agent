@@ -22,6 +22,7 @@ def _ensure_columns() -> None:
             "remind_attempts": (
                 "ALTER TABLE todos ADD COLUMN remind_attempts INTEGER NOT NULL DEFAULT 0"
             ),
+            "completed_at": "ALTER TABLE todos ADD COLUMN completed_at DATETIME",
         }
         for name, statement in additions.items():
             if name not in columns:
@@ -34,6 +35,14 @@ def _ensure_columns() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE questions ADD COLUMN original_filename VARCHAR(255) "
                 "NOT NULL DEFAULT ''"
+            )
+
+        message_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(messages)")
+        }
+        if "citations" not in message_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE messages ADD COLUMN citations TEXT NOT NULL DEFAULT '[]'"
             )
 
 

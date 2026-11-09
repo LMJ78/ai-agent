@@ -1,23 +1,34 @@
 import { useMemo, useState } from "react";
 import {
   BookOpen,
+  Brain,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   GraduationCap,
   Library,
+  ListChecks,
   LogOut,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Search,
+  Settings,
   Trash2,
   X
 } from "lucide-react";
 import type { ChatSession, User } from "../types";
 import { LifeTodoCard } from "./LifeTodoCard";
 
-export type PageKey = "chat" | "knowledge" | "questions";
+export type PageKey =
+  | "chat"
+  | "review"
+  | "knowledge"
+  | "questions"
+  | "calendar"
+  | "habits"
+  | "settings";
 
 type Props = {
   user: User;
@@ -36,10 +47,18 @@ type Props = {
   onLogout: () => void;
 };
 
-const PAGE_ITEMS: { key: PageKey; label: string; icon: typeof MessageSquare }[] = [
+const STUDY_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[] = [
   { key: "chat", label: "聊天", icon: MessageSquare },
+  { key: "review", label: "错题本", icon: Brain },
   { key: "knowledge", label: "知识库", icon: Library },
   { key: "questions", label: "题库", icon: BookOpen }
+];
+
+const LIFE_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[] = [
+  { key: "chat", label: "聊天", icon: MessageSquare },
+  { key: "calendar", label: "日程", icon: CalendarDays },
+  { key: "habits", label: "习惯", icon: ListChecks },
+  { key: "settings", label: "设置与用量", icon: Settings }
 ];
 
 function formatSessionDate(iso: string): string {
@@ -198,7 +217,7 @@ export function Sidebar({
       {mode === "life" && <LifeTodoCard />}
 
       <nav className="sidebar-nav">
-        {PAGE_ITEMS.map((item) => {
+        {(mode === "life" ? LIFE_PAGES : STUDY_PAGES).map((item) => {
           const Icon = item.icon;
           return (
             <button

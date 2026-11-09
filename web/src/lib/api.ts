@@ -1,4 +1,4 @@
-import type { AuthResponse, ChatStreamEvent, User } from "../types";
+import type { AuthResponse, ChatStreamEvent, Citation, User } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
@@ -98,12 +98,14 @@ export type ChatPayload = {
   course?: string;
   question_id?: number;
   teaching_stage?: "hint" | "step" | "answer";
+  feynman?: boolean;
 };
 
 type StreamHandlers = {
   onSession?: (id: number, course?: string) => void;
   onDelta?: (delta: string) => void;
   onTool?: (event: Extract<ChatStreamEvent, { type: "tool_call" | "tool_result" }>) => void;
+  onCitations?: (citations: Citation[]) => void;
   onError?: (message: string) => void;
 };
 
@@ -150,6 +152,8 @@ export async function streamChat(
       handlers.onDelta?.(event.delta);
     } else if ("error" in event) {
       handlers.onError?.(event.error);
+    } else if ("type" in event && event.type === "citations") {
+      handlers.onCitations?.(event.citations);
     } else if ("type" in event) {
       handlers.onTool?.(event);
     }

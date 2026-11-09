@@ -8,11 +8,26 @@
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 
 class ToolError(Exception):
     """工具执行失败。会被转成一段文本回给模型，而不是让整个请求崩掉。"""
+
+
+@dataclass
+class ToolResult:
+    """工具结果：给模型看的文本 + 给前端做引用预览的结构化数据。"""
+
+    text: str
+    citations: list[dict[str, Any]] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        return self.text
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.text
 
 
 class BaseTool(ABC):
@@ -21,7 +36,7 @@ class BaseTool(ABC):
     parameters: ClassVar[dict[str, Any]]
 
     @abstractmethod
-    async def run(self, user_id: int, arguments: dict[str, Any]) -> str:
+    async def run(self, user_id: int, arguments: dict[str, Any]) -> str | ToolResult:
         """执行工具。user_id 用来做数据隔离，工具内部必须自己按它过滤。"""
 
     def spec(self) -> dict[str, Any]:

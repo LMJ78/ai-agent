@@ -5,6 +5,10 @@ import { ChatView } from "./components/ChatView";
 import { LoginPage } from "./pages/LoginPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { QuestionBankPage } from "./pages/QuestionBankPage";
+import { ReviewPage } from "./pages/ReviewPage";
+import { CalendarPage } from "./pages/CalendarPage";
+import { HabitsPage } from "./pages/HabitsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { ApiError, api, clearAuth, getStoredUser, getToken, me } from "./lib/api";
 import type {
   AuthResponse,
@@ -139,6 +143,8 @@ export default function App() {
     setMode(next);
     setSessions([]);
     setSelectedQuestion(null);
+    const validPages = next === "life" ? ["chat", "calendar", "habits", "settings"] : ["chat", "review", "knowledge", "questions"];
+    if (!validPages.includes(page)) setPage("chat");
     if (activeSession) {
       setActiveSession(null);
       notify(next === "study" ? "已切到学习模式，开一个新对话" : "已切到生活模式，开一个新对话");
@@ -189,8 +195,24 @@ export default function App() {
   const topTitle = useMemo(() => {
     if (page === "knowledge") return "知识库";
     if (page === "questions") return "题库";
+    if (page === "review") return "错题本";
+    if (page === "calendar") return "日程";
+    if (page === "habits") return "习惯";
+    if (page === "settings") return "设置与用量";
     return activeSession?.title || (selectedQuestion ? "讲解这道题" : "新对话");
   }, [page, activeSession, selectedQuestion]);
+
+  const pageSubtitle = useMemo(() => {
+    if (page === "knowledge") return "你的资料，只给你自己用";
+    if (page === "questions") return "按科目归档的题目和原图";
+    if (page === "review") return "答错的题，过几天再来一次";
+    if (page === "calendar") return "课表、实验和约会，提前提醒";
+    if (page === "habits") return "每天一点，连续天数自己会说话";
+    if (page === "settings") return "早晚简报与 token 用量";
+    return `${mode === "study" ? "学习模式" : "生活模式"}${
+      mode === "study" && activeCourse ? ` · ${activeCourse}` : ""
+    }`;
+  }, [page, mode, activeCourse]);
 
   if (booting) {
     return <div className="center">正在恢复登录…</div>;
@@ -239,15 +261,7 @@ export default function App() {
           )}
           <div className="topbar-title">
             <h1>{topTitle}</h1>
-            <p>
-              {page === "chat"
-                ? `${mode === "study" ? "学习模式" : "生活模式"}${
-                    mode === "study" && activeCourse ? ` · ${activeCourse}` : ""
-                  }`
-                : page === "knowledge"
-                  ? "你的资料，只给你自己用"
-                  : "按科目归档的题目和原图"}
-            </p>
+            <p>{pageSubtitle}</p>
           </div>
 
           {page === "chat" && (
@@ -297,6 +311,10 @@ export default function App() {
               onChanged={() => void refreshCourses()}
             />
           )}
+          {page === "review" && <ReviewPage />}
+          {page === "calendar" && <CalendarPage />}
+          {page === "habits" && <HabitsPage />}
+          {page === "settings" && <SettingsPage notify={notify} />}
         </div>
       </main>
 

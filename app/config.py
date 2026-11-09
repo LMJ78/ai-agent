@@ -63,9 +63,14 @@ class Settings(BaseSettings):
     # 数据库
     database_url: str = DEFAULT_DATABASE_URL
 
-    # 待办提醒后台任务
+    # 待办 / 日程 / 早晚简报后台任务
     reminder_worker_enabled: bool = True
     reminder_scan_seconds: int = 30
+    calendar_reminder_minutes: int = 30
+
+    # 用量估算单价（元 / 百万 token）。只用于面板估算，不是账单。
+    deepseek_input_price_yuan: float = 2.0
+    deepseek_output_price_yuan: float = 8.0
 
     # 生成参数（第 6 周做配额时还会用到 max_tokens）
     temperature: float = 0.7

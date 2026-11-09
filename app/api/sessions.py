@@ -1,5 +1,6 @@
 """学习记录：按科目/模式列出会话、回看消息、改名、删除。"""
 
+import json
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -108,6 +109,7 @@ def get_session_messages(
                 "id": item.id,
                 "role": item.role,
                 "content": item.content,
+                "citations": json.loads(item.citations or "[]"),
                 "created_at": item.created_at.isoformat() if item.created_at else "",
             }
             for item in rows

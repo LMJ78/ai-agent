@@ -10,7 +10,9 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.db.base import SessionLocal
-from app.db.models import Todo
+from app.db.models import CalendarEvent, Todo
+from app.services.briefs import send_due_briefs
+from app.services.calendar import next_occurrence
 from app.services.push import PushError, PushNotConfiguredError, send_to_user
 from app.tools.time import CHINA_TZ
 
@@ -81,6 +83,43 @@ async def scan_due_todos(now: datetime | None = None) -> dict[str, int]:
     return result
 
 
+async def scan_due_events(now: datetime | None = None) -> dict[str, int]:
+    """课程/日程开始前 calendar_reminder_minutes 分钟推送。"""
+    current = _as_utc(now) or datetime.now(timezone.utc)
+    window = current.timestamp() + settings.calendar_reminder_minutes * 60
+    result = {"due": 0, "sent": 0, "failed": 0, "skipped": 0}
+
+    with SessionLocal() as db:
+        rows = db.scalars(select(CalendarEvent)).all()
+        for event in rows:
+            occurrence = next_occurrence(event, current)
+            # 一次性事件已经过去就别补发；只提醒即将开始或刚刚开始的。
+            if occurrence.timestamp() < current.timestamp() - 60:
+                continue
+            if occurrence.timestamp() > window:
+                continue
+            if event.last_reminded_for is not None:
+                last = _as_utc(event.last_reminded_for)
+                if last is not None and abs((last - occurrence).total_seconds()) < 60:
+                    continue
+            result["due"] += 1
+            local = occurrence.astimezone(CHINA_TZ)
+            where = f"\n地点：{event.location}" if event.location else ""
+            content = f"{local:%m-%d %H:%M} {event.title}{where}"
+            try:
+                await send_to_user(db, event.user_id, "日程提醒", content)
+            except PushNotConfiguredError:
+                result["skipped"] += 1
+                continue
+            except PushError:
+                result["failed"] += 1
+                continue
+            event.last_reminded_for = occurrence
+            db.commit()
+            result["sent"] += 1
+    return result
+
+
 async def reminder_loop() -> None:
     """每 30 秒扫一次。只应在一个进程里跑，避免重复推送。"""
     while True:
@@ -88,6 +127,10 @@ async def reminder_loop() -> None:
             result = await scan_due_todos()
             if result["sent"] or result["failed"]:
                 logger.info("待办提醒扫描：%s", result)
+            event_result = await scan_due_events()
+            if event_result["sent"] or event_result["failed"]:
+                logger.info("日程提醒扫描：%s", event_result)
+            await send_due_briefs()
         except asyncio.CancelledError:
             raise
         except Exception:

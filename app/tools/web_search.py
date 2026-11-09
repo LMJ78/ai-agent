@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
-from app.tools.base import BaseTool, ToolError
+from app.tools.base import BaseTool, ToolError, ToolResult
 
 
 def _clamp_results(value: Any) -> int:
@@ -103,7 +103,7 @@ class WebSearchTool(BaseTool):
         "additionalProperties": False,
     }
 
-    async def run(self, user_id: int, arguments: dict[str, Any]) -> str:
+    async def run(self, user_id: int, arguments: dict[str, Any]) -> ToolResult:
         # user_id 目前不参与检索；保留参数是为了和别的工具保持同一套协议。
         del user_id
         query = str(arguments.get("query", "")).strip()
@@ -112,9 +112,10 @@ class WebSearchTool(BaseTool):
 
         results = await search_web(query, _clamp_results(arguments.get("max_results")))
         if not results:
-            return "没有搜到相关网页。可以换更具体的关键词，或先查本地课件。"
+            return ToolResult("没有搜到相关网页。可以换更具体的关键词，或先查本地课件。")
 
         blocks = []
+        citations = []
         for index, item in enumerate(results, start=1):
             title = str(item.get("title", "")).strip() or "（无标题）"
             url = str(item.get("url", "")).strip()
@@ -122,8 +123,18 @@ class WebSearchTool(BaseTool):
             if len(content) > 600:
                 content = content[:600] + "…"
             blocks.append(f"[W{index}] {title}\nURL: {url}\n摘要: {content}")
+            citations.append(
+                {
+                    "type": "web",
+                    "label": f"W{index}",
+                    "title": title,
+                    "url": url,
+                    "snippet": content[:500],
+                }
+            )
 
-        return (
+        return ToolResult(
             "\n\n".join(blocks)
-            + "\n\n以上是网页搜索结果，可能不是最新版本；关键结论请点开链接核对。"
+            + "\n\n以上是网页搜索结果，可能不是最新版本；关键结论请点开链接核对。",
+            citations,
         )

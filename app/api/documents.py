@@ -1,15 +1,17 @@
 """课程资料上传 / 列表 / 删除。"""
 
+import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.agent.vision import VisionError, VisionNotConfiguredError
 from app.core.deps import get_current_user
 from app.db.base import get_db
-from app.db.models import Chunk, User
+from app.db.models import Chunk, Document, User
 from app.rag.ingest import delete_document, ingest_path_async, list_documents, save_upload
 from app.rag.parser import ParseError
 
@@ -92,6 +94,27 @@ def get_documents(
         }
         for doc in docs
     ]
+
+
+@router.get("/documents/{document_id}/file")
+def document_file(
+    document_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    doc = db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.user_id == user.id,
+        )
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="资料不存在")
+    path = Path(doc.file_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="原文件已不存在")
+    media_type = mimetypes.guess_type(doc.filename)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=doc.filename)
 
 
 @router.delete("/documents/{document_id}")

@@ -18,6 +18,7 @@ from app.core.deps import get_current_user
 from app.db.base import get_db
 from app.db.models import Quiz, QuizQuestion, User
 from app.rag.retriever import search_chunks
+from app.services.review import record_wrong_answer
 
 router = APIRouter()
 
@@ -286,11 +287,17 @@ def submit_quiz(
 
     correct = 0
     details = []
+    wrong_added = 0
     for item in items:
         given = _normalize_choice(payload.answers.get(item.id, ""))
         is_correct = given == item.answer
         if is_correct:
             correct += 1
+        else:
+            record_wrong_answer(
+                db, user_id=user.id, quiz=quiz, item=item, given=given
+            )
+            wrong_added += 1
         details.append(
             {
                 **_item_dict(item, reveal=True),
@@ -309,6 +316,7 @@ def submit_quiz(
         "score": correct,
         "total": len(items),
         "percent": round(correct / len(items) * 100, 1),
+        "wrong_added": wrong_added,
         "items": details,
     }
 

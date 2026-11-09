@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import settings
-from app.tools import execute_tool, get_tool_specs
+from app.tools import execute_tool_full, get_tool_specs
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,16 @@ async def run_agent(
             yield AgentEvent("error", {"message": "模型没有返回任何结果"})
             return
 
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            yield AgentEvent(
+                "usage",
+                {
+                    "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+                    "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+                },
+            )
+
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None)
 
@@ -97,7 +107,7 @@ async def run_agent(
                 },
             )
 
-            result = await execute_tool(
+            result = await execute_tool_full(
                 name, raw_arguments, user_id, default_course=course
             )
             yield AgentEvent(
@@ -105,14 +115,15 @@ async def run_agent(
                 {
                     "id": call.id,
                     "name": name,
-                    "result": result[:600],  # 前端只展示摘要，完整结果给模型
+                    "result": result.text[:600],  # 前端只展示摘要，完整结果给模型
+                    "citations": result.citations,
                 },
             )
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": call.id,
-                    "content": result,
+                    "content": result.text,
                 }
             )
 

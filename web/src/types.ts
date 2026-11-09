@@ -22,6 +22,19 @@ export type ChatSession = {
   updated_at: string;
 };
 
+export type Citation = {
+  type: "note" | "web";
+  label: string;
+  title?: string;
+  url?: string;
+  document_id?: number;
+  filename?: string;
+  location?: string;
+  course?: string;
+  chapter?: string;
+  snippet?: string;
+};
+
 export type ChatMessage = {
   id?: number;
   role: "user" | "assistant" | "system";
@@ -29,6 +42,7 @@ export type ChatMessage = {
   created_at?: string;
   pending?: boolean;
   trace?: ToolTrace[];
+  citations?: Citation[];
 };
 
 export type ToolTrace = {
@@ -93,4 +107,81 @@ export type ChatStreamEvent =
   | { session_id: number; course?: string }
   | { delta: string }
   | { type: "tool_call" | "tool_result"; name?: string; arguments?: unknown; content?: string }
+  | { type: "citations"; citations: Citation[] }
   | { error: string };
+
+export type ReviewItem = {
+  id: number;
+  course: string;
+  chapter: string;
+  question: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+  source: string;
+  wrong_count: number;
+  review_count: number;
+  correct_streak: number;
+  last_result: string;
+  status: "active" | "mastered";
+  next_review_at: string | null;
+  last_reviewed_at: string | null;
+  created_at: string;
+};
+
+export type ReviewStats = {
+  active: number;
+  mastered: number;
+  due: number;
+  by_course: { course: string; count: number }[];
+};
+
+export type CalendarEvent = {
+  id: number;
+  title: string;
+  location: string;
+  course: string;
+  start_at: string;
+  end_at: string | null;
+  recurrence: "none" | "weekly";
+  weekday: number | null;
+  note: string;
+  occurrence_start?: string;
+  occurrence_end?: string | null;
+};
+
+export type BriefSettings = {
+  morning_enabled: boolean;
+  morning_time: string;
+  evening_enabled: boolean;
+  evening_time: string;
+  news_topics: string;
+};
+
+export type Habit = {
+  id: number;
+  name: string;
+  icon: string;
+  sort_order: number;
+  active: boolean;
+  done_today: boolean;
+  streak: number;
+  week_done: number;
+};
+
+export type UsageDay = {
+  date: string;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_yuan: number;
+};
+
+export type UsageSummary = {
+  days: number;
+  total_turns: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_yuan: number;
+  series: UsageDay[];
+};

@@ -3,7 +3,7 @@
 from typing import Any
 
 from app.rag.retriever import search_chunks
-from app.tools.base import BaseTool, ToolError
+from app.tools.base import BaseTool, ToolError, ToolResult
 
 
 class SearchNotesTool(BaseTool):
@@ -34,7 +34,7 @@ class SearchNotesTool(BaseTool):
         "additionalProperties": False,
     }
 
-    async def run(self, user_id: int, arguments: dict[str, Any]) -> str:
+    async def run(self, user_id: int, arguments: dict[str, Any]) -> ToolResult:
         query = str(arguments.get("query", "")).strip()
         if not query:
             raise ToolError("检索词不能为空")
@@ -48,11 +48,26 @@ class SearchNotesTool(BaseTool):
 
         results = search_chunks(user_id=user_id, query=query, course=course, top_k=top_k)
         if not results:
-            return "没有检索到相关课程资料。可能还没上传课件，或者这门课的资料里没有相关内容。"
+            return ToolResult(
+                "没有检索到相关课程资料。可能还没上传课件，或者这门课的资料里没有相关内容。"
+            )
 
         blocks = []
+        citations = []
         for index, item in enumerate(results, start=1):
             blocks.append(
                 f"[L{index}] {item.filename} / {item.location}\n{item.text}"
             )
-        return "\n\n".join(blocks)
+            citations.append(
+                {
+                    "type": "note",
+                    "label": f"L{index}",
+                    "document_id": item.document_id,
+                    "filename": item.filename,
+                    "location": item.location,
+                    "course": item.course,
+                    "chapter": item.chapter,
+                    "snippet": item.text[:500],
+                }
+            )
+        return ToolResult("\n\n".join(blocks), citations)

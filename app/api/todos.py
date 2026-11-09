@@ -48,6 +48,7 @@ def _todo_dict(todo: Todo) -> dict:
         "remind_at": _iso(todo.remind_at),
         "reminded_at": _iso(todo.reminded_at),
         "done": todo.done,
+        "completed_at": _iso(todo.completed_at),
         "created_at": _iso(todo.created_at),
     }
 
@@ -122,6 +123,7 @@ def update_todo(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if payload.done is not None:
         todo.done = payload.done
+        todo.completed_at = datetime.now(timezone.utc) if payload.done else None
     db.commit()
     db.refresh(todo)
     return _todo_dict(todo)

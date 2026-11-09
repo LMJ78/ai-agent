@@ -66,6 +66,16 @@ TEACHING_PROMPT = """你现在的角色是「解题老师」，正在讲一道�
 - 资料里没有的内容就直说，不要编造。"""
 
 
+FEYNMAN_PROMPT = """你现在的角色是「费曼学习法教练」。规则和普通讲解不同：
+
+1. 不主动讲答案，让用户用自己的话讲。先请用户讲一个概念/题目，越具体越好。
+2. 每次只问一个问题，追问「为什么」「举个例子」「如果条件变了呢」，帮用户找到自己没讲清的地方。
+3. 不打断、不长篇纠错；先肯定讲对的部分，再指出一个最关键的漏洞或模糊点。
+4. 用户说「我讲完了」时，给一个简短评分（1–5 分）+ 三个检查点：
+   概念是否准确、有没有例子、能不能说清边界/前提。
+5. 用户明确要求才给标准答案；不要用「你应该」开头，保持好奇和耐心。"""
+
+
 def build_teaching_prompt(stage: str, course: str = "") -> str:
     labels = {
         "hint": "只给提示",
@@ -86,11 +96,14 @@ def build_system_prompt(
     teaching_stage: str | None = None,
     emotion: str | None = None,
     memories: str | None = None,
+    feynman: bool = False,
 ) -> str:
     parts = [BASE_PROMPT, MODE_PROMPTS.get(mode, MODE_PROMPTS["study"]), TOOL_PROMPT]
     if mode == "life":
         parts.append(LIFE_PROMPT)
-    if teaching_stage and mode == "study":
+    if feynman and mode == "study":
+        parts.append(FEYNMAN_PROMPT)
+    elif teaching_stage and mode == "study":
         parts.append(build_teaching_prompt(teaching_stage, course))
     if course and mode == "study":
         parts.append(

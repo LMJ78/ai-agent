@@ -4,13 +4,22 @@ import {
   BookOpen,
   Coffee,
   Copy,
+  ExternalLink,
+  FileText,
   GraduationCap,
   Square,
   Sparkles,
   X
 } from "lucide-react";
-import { ApiError, api, streamChat } from "../lib/api";
-import type { ChatMessage, ChatSession, CourseSummary, QuestionItem, ToolTrace } from "../types";
+import { ApiError, api, getToken, streamChat } from "../lib/api";
+import type {
+  ChatMessage,
+  ChatSession,
+  Citation,
+  CourseSummary,
+  QuestionItem,
+  ToolTrace
+} from "../types";
 import { Markdown } from "./Markdown";
 
 type UiMessage = ChatMessage & { key: string };
@@ -68,6 +77,8 @@ export function ChatView({
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [stage, setStage] = useState<Stage>("auto");
+  const [feynman, setFeynman] = useState(false);
+  const [preview, setPreview] = useState<Citation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sessionId, setSessionId] = useState<number | null>(activeSession?.id ?? null);
@@ -127,6 +138,29 @@ export function ChatView({
     setMessages((prev) => prev.map((item) => (item.key === key ? updater(item) : item)));
   };
 
+  const openCitation = async (citation: Citation) => {
+    if (citation.type === "web" && citation.url) {
+      window.open(citation.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setPreview(citation);
+  };
+
+  const openNoteFile = async (citation: Citation) => {
+    if (!citation.document_id) return;
+    try {
+      const res = await fetch(`/api/documents/${citation.document_id}/file`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      if (!res.ok) throw new Error("原文件打不开");
+      const url = URL.createObjectURL(await res.blob());
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "原文件打不开");
+    }
+  };
+
   const send = async () => {
     if (!canSend) return;
     const text = input.trim();
@@ -164,7 +198,8 @@ export function ChatView({
           mode,
           course: mode === "study" ? currentCourse : undefined,
           question_id: activeQuestion?.id,
-          teaching_stage: stage === "auto" ? undefined : stage
+          teaching_stage: stage === "auto" ? undefined : stage,
+          feynman
         },
         {
           onSession: (id) => {
@@ -185,6 +220,9 @@ export function ChatView({
               };
               return { ...item, trace: [...(item.trace || []), trace] };
             });
+          },
+          onCitations: (citations) => {
+            updateAssistant(assistantKey, (item) => ({ ...item, citations }));
           },
           onError: (message) => setError(message)
         },
@@ -309,6 +347,24 @@ export function ChatView({
                     ) : (
                       <div className="bubble">{message.content}</div>
                     )}
+                    {message.role === "assistant" && message.citations && message.citations.length > 0 && (
+                      <div className="citations">
+                        <span className="citations-label">依据</span>
+                        {message.citations.map((citation) => (
+                          <button
+                            className={`citation-chip ${citation.type}`}
+                            key={`${message.key}-${citation.label}`}
+                            onClick={() => void openCitation(citation)}
+                            title={citation.snippet || citation.title || citation.filename || ""}
+                          >
+                            {citation.type === "web" ? <ExternalLink size={11} /> : <FileText size={11} />}
+                            {citation.label}
+                            {citation.filename ? ` · ${citation.filename}` : ""}
+                            {citation.location ? ` · ${citation.location}` : ""}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {message.role === "assistant" && message.content && !message.pending && (
                       <div className="message-actions">
                         <button onClick={() => copy(message.content)}>
@@ -347,12 +403,24 @@ export function ChatView({
               {STAGES.map((item) => (
                 <button
                   key={item.key}
-                  className={`stage-chip ${stage === item.key ? "active" : ""}`}
+                  className={`stage-chip ${stage === item.key && !feynman ? "active" : ""}`}
+                  disabled={feynman}
                   onClick={() => setStage(item.key)}
                 >
                   {item.label}
                 </button>
               ))}
+              <span className="stage-divider" />
+              <button
+                className={`stage-chip feynman ${feynman ? "active" : ""}`}
+                onClick={() => {
+                  setFeynman((value) => !value);
+                  setStage("auto");
+                }}
+                title="费曼模式：让你先用自己的话讲，我来找漏洞"
+              >
+                费曼
+              </button>
             </div>
           )}
           <div className="composer-box">
@@ -361,11 +429,13 @@ export function ChatView({
               value={input}
               rows={1}
               placeholder={
-                question
-                  ? "可以直接发送，让老师按这道题讲；也可以补充你的卡点"
-                  : mode === "study"
-                    ? "问课件、问题目，或者让我一步一步讲…"
-                    : "说说今天的事，或者让我记住一件重要的事…"
+                feynman
+                  ? "用你自己的话讲一遍这个概念，我来找漏洞…"
+                  : question
+                    ? "可以直接发送，让老师按这道题讲；也可以补充你的卡点"
+                    : mode === "study"
+                      ? "问课件、问题目，或者让我一步一步讲…"
+                      : "说说今天的事，或者让我记住一件重要的事…"
               }
               onChange={(event) => {
                 setInput(event.target.value);
@@ -393,6 +463,35 @@ export function ChatView({
           <div className="composer-hint">Enter 发送 · Shift + Enter 换行 · 回答中的 [L] 来自课件</div>
         </div>
       </div>
+
+      {preview && (
+        <div className="modal-backdrop" onClick={() => setPreview(null)}>
+          <div className="modal citation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h3>{preview.filename || preview.title || preview.label}</h3>
+                <p className="faint">
+                  {preview.course} {preview.chapter} {preview.location}
+                </p>
+              </div>
+              <button className="icon-btn" onClick={() => setPreview(null)} aria-label="关闭">
+                <X size={15} />
+              </button>
+            </div>
+            <p className="citation-snippet">{preview.snippet || "这条引用没有可预览的片段。"}</p>
+            <div className="modal-actions">
+              <button className="btn ghost" onClick={() => setPreview(null)}>
+                关闭
+              </button>
+              {preview.document_id && (
+                <button className="btn" onClick={() => void openNoteFile(preview)}>
+                  <FileText size={14} /> 打开原文件
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

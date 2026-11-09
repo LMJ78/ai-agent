@@ -28,6 +28,7 @@ from app.services.memories import (
     recall_memories,
     remember_explicit,
 )
+from app.services.usage import record_usage
 from app.tools.time import format_now
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,10 @@ class ChatRequest(BaseModel):
     teaching_stage: Literal["hint", "step", "answer"] | None = Field(
         default=None,
         description="解题阶段；不传则根据「继续 / 直接看答案」自动判断，默认只给提示",
+    )
+    feynman: bool = Field(
+        default=False,
+        description="费曼模式：用户讲、AI 追问，不直接给答案",
     )
 
 
@@ -150,6 +155,10 @@ async def _stream_agent(
     course: str = "",
 ) -> AsyncIterator[str]:
     final_parts: list[str] = []
+    citations: list[dict[str, Any]] = []
+    seen_labels: set[tuple[str, str]] = set()
+    input_tokens = 0
+    output_tokens = 0
 
     try:
         yield _sse({"session_id": session_id, "course": course})
@@ -157,6 +166,8 @@ async def _stream_agent(
         async for event in run_agent(client, messages, user_id, course=course):
             if event.type == "final":
                 text = str(event.data.get("content", ""))
+                if citations:
+                    yield _sse({"type": "citations", "citations": citations})
                 if text:
                     final_parts.append(text)
                     for chunk in _chunks(text):
@@ -168,6 +179,18 @@ async def _stream_agent(
                 yield _sse({"error": event.data.get("message", "未知错误")})
                 yield "data: [DONE]\n\n"
                 return
+
+            if event.type == "usage":
+                input_tokens += int(event.data.get("input_tokens", 0) or 0)
+                output_tokens += int(event.data.get("output_tokens", 0) or 0)
+                continue
+
+            if event.type == "tool_result":
+                for citation in event.data.get("citations", []) or []:
+                    key = (str(citation.get("type")), str(citation.get("label")))
+                    if key not in seen_labels:
+                        seen_labels.add(key)
+                        citations.append(citation)
 
             # tool_call / tool_result：单独的事件类型，前端可以显示「正在查待办…」
             yield _sse({"type": event.type, **event.data})
@@ -188,11 +211,13 @@ async def _stream_agent(
                             user_id=user_id,
                             role="assistant",
                             content=text,
+                            citations=json.dumps(citations, ensure_ascii=False),
                         )
                     )
                     session = db.get(ChatSession, session_id)
                     if session is not None:
                         session.updated_at = utcnow()
+                    record_usage(db, user_id, input_tokens, output_tokens)
                     db.commit()
             except Exception:  # noqa: BLE001
                 logger.exception("保存助手回复失败")
@@ -206,6 +231,9 @@ async def chat(
 ) -> StreamingResponse:
     question: Question | None = None
     course_override: str | None = None
+
+    if req.feynman and req.mode == "life":
+        raise HTTPException(status_code=400, detail="费曼模式只在学习模式可用")
 
     if req.question_id is not None:
         question = db.scalar(
@@ -241,7 +269,11 @@ async def chat(
     session = _get_or_create_session(db, user, req, course_override=course_override)
     history = _load_history(db, session.id, settings.history_limit)
 
-    teaching_stage = _resolve_teaching_stage(req, has_question=question is not None)
+    teaching_stage = (
+        None
+        if req.feynman
+        else _resolve_teaching_stage(req, has_question=question is not None)
+    )
     message_text = req.message.strip()
     if question is not None:
         # 题干由后端拼接，前端只传一句「请讲解这道题」即可，避免题干被截断。
@@ -277,6 +309,7 @@ async def chat(
                 teaching_stage=teaching_stage,
                 emotion=emotion,
                 memories=memory_text,
+                feynman=req.feynman,
             ),
         },
         *history,

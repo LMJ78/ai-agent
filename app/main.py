@@ -14,15 +14,20 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
+from app.api.calendar import router as calendar_router
 from app.api.chat import router as chat_router
 from app.api.courses import router as courses_router
 from app.api.documents import router as documents_router
+from app.api.habits import router as habits_router
 from app.api.memories import router as memories_router
 from app.api.push import router as push_router
 from app.api.questions import router as questions_router
 from app.api.quizzes import router as quizzes_router
+from app.api.review import router as review_router
 from app.api.sessions import router as sessions_router
+from app.api.settings import router as settings_router
 from app.api.todos import router as todos_router
+from app.api.usage import router as usage_router
 from app.config import settings
 from app.db.base import get_db
 from app.db.init import init_db
@@ -68,6 +73,11 @@ app.include_router(quizzes_router, prefix="/api", tags=["quizzes"])
 app.include_router(memories_router, prefix="/api", tags=["memories"])
 app.include_router(push_router, prefix="/api", tags=["push"])
 app.include_router(todos_router, prefix="/api", tags=["todos"])
+app.include_router(review_router, prefix="/api", tags=["review"])
+app.include_router(calendar_router, prefix="/api", tags=["calendar"])
+app.include_router(settings_router, prefix="/api", tags=["settings"])
+app.include_router(habits_router, prefix="/api", tags=["habits"])
+app.include_router(usage_router, prefix="/api", tags=["usage"])
 
 # React 开发服务器（Vite）直接请求 8000 时使用；生产同源部署不需要。
 app.add_middleware(

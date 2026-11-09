@@ -91,6 +91,8 @@ class Message(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(16))  # user / assistant / system
     content: Mapped[str] = mapped_column(Text)
+    # 结构化引用：[L1]/[W1] 对应的原文位置，JSON 数组字符串
+    citations: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
@@ -206,6 +208,9 @@ class Todo(Base):
     )
     remind_attempts: Mapped[int] = mapped_column(Integer, default=0)
     done: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -253,3 +258,103 @@ class UsageDaily(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cost_yuan: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class ReviewItem(Base):
+    """错题本里的一张复习卡。存题目快照，原题删了也不影响复习。"""
+
+    __tablename__ = "review_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    course: Mapped[str] = mapped_column(String(64), default="", index=True)
+    chapter: Mapped[str] = mapped_column(String(64), default="")
+    question: Mapped[str] = mapped_column(Text)
+    options: Mapped[str] = mapped_column(Text, default="[]")
+    answer: Mapped[str] = mapped_column(String(16), default="")
+    explanation: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(255), default="")
+    quiz_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    wrong_count: Mapped[int] = mapped_column(Integer, default=1)
+    review_count: Mapped[int] = mapped_column(Integer, default=0)
+    correct_streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_result: Mapped[str] = mapped_column(String(16), default="")  # correct / wrong
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    next_review_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class CalendarEvent(Base):
+    """课表/日程。recurrence=weekly 时按 weekday 每周重复。"""
+
+    __tablename__ = "calendar_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    location: Mapped[str] = mapped_column(String(255), default="")
+    course: Mapped[str] = mapped_column(String(64), default="")
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recurrence: Mapped[str] = mapped_column(String(16), default="none")  # none / weekly
+    weekday: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0=周一
+    note: Mapped[str] = mapped_column(Text, default="")
+    last_reminded_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UserSettings(Base):
+    """每个用户一条：早晚简报、时区、避免重复推送的日期。"""
+
+    __tablename__ = "user_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), unique=True, index=True
+    )
+    morning_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    morning_time: Mapped[str] = mapped_column(String(5), default="07:30")
+    evening_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    evening_time: Mapped[str] = mapped_column(String(5), default="21:30")
+    news_topics: Mapped[str] = mapped_column(String(255), default="")
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Shanghai")
+    last_morning_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_evening_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class Habit(Base):
+    __tablename__ = "habits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    icon: Mapped[str] = mapped_column(String(16), default="✅")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class HabitLog(Base):
+    __tablename__ = "habit_logs"
+    __table_args__ = (
+        UniqueConstraint("habit_id", "log_date", name="uq_habit_log_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    habit_id: Mapped[int] = mapped_column(ForeignKey("habits.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    log_date: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
