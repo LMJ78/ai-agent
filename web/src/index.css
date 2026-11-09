@@ -1373,6 +1373,118 @@ a {
   display: none;
 }
 
+/* ---------- 侧栏折叠 / 历史删除 ---------- */
+
+.sidebar {
+  position: relative;
+  transition: width 0.18s ease, flex-basis 0.18s ease;
+}
+
+.brand-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-collapse {
+  margin-left: auto;
+}
+
+.sidebar.collapsed {
+  width: 76px;
+  flex: 0 0 76px;
+}
+
+.sidebar.collapsed .sidebar-head {
+  padding: 18px 10px 10px;
+}
+
+.sidebar.collapsed .brand {
+  padding: 4px 0 16px;
+  justify-content: center;
+}
+
+.sidebar.collapsed .brand-copy,
+.sidebar.collapsed .sidebar-collapse,
+.sidebar.collapsed .search-box,
+.sidebar.collapsed .session-groups,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .user-meta {
+  display: none;
+}
+
+.sidebar.collapsed .new-chat {
+  padding: 11px 0;
+  justify-content: center;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 9px 0;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  justify-content: center;
+}
+
+.desktop-expand {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .desktop-expand {
+    display: inline-flex;
+  }
+}
+
+.session-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.session-row .session-item {
+  flex: 1;
+  min-width: 0;
+  padding-right: 34px;
+}
+
+.session-delete {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.14s ease;
+}
+
+.session-row:hover .session-delete,
+.session-row.active .session-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.session-delete:hover {
+  color: #ff9b9b;
+  background: rgba(255, 100, 100, 0.12);
+}
+
+/* 触屏没有 hover，删除入口常显，否则只能删当前会话。 */
+@media (hover: none) {
+  .session-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 @media (max-width: 900px) {
   .sidebar-close {
     display: inline-flex;
@@ -1381,9 +1493,53 @@ a {
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
+    width: 286px;
+    flex-basis: 286px;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow);
+  }
+
+  /* 手机上不用折叠态：抽屉始终完整显示。 */
+  .sidebar.collapsed {
+    width: 286px;
+    flex-basis: 286px;
+  }
+
+  .sidebar.collapsed .brand-copy,
+  .sidebar.collapsed .session-groups,
+  .sidebar.collapsed .user-meta {
+    display: block;
+  }
+
+  .sidebar.collapsed .search-box {
+    display: flex;
+  }
+
+  .sidebar.collapsed .nav-label {
+    display: inline;
+  }
+
+  .sidebar.collapsed .sidebar-head {
+    padding: 18px 16px 10px;
+  }
+
+  .sidebar.collapsed .brand,
+  .sidebar.collapsed .sidebar-footer {
+    justify-content: flex-start;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: flex-start;
+    padding: 9px 10px;
+  }
+
+  .sidebar.collapsed .new-chat {
+    padding: 11px 12px;
+  }
+
+  .sidebar-collapse {
+    display: none;
   }
 
   .sidebar.open {

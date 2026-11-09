@@ -7,8 +7,11 @@ import {
   Library,
   LogOut,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
+  Trash2,
   X
 } from "lucide-react";
 import type { ChatSession, User } from "../types";
@@ -21,8 +24,11 @@ type Props = {
   activeSessionId: number | null;
   activePage: PageKey;
   open: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onClose: () => void;
   onSelectSession: (session: ChatSession) => void;
+  onDeleteSession: (session: ChatSession) => void;
   onNewChat: () => void;
   onPage: (page: PageKey) => void;
   onLogout: () => void;
@@ -53,14 +59,17 @@ export function Sidebar({
   activeSessionId,
   activePage,
   open,
+  collapsed,
+  onToggleCollapse,
   onClose,
   onSelectSession,
+  onDeleteSession,
   onNewChat,
   onPage,
   onLogout
 }: Props) {
   const [query, setQuery] = useState("");
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const groups = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
@@ -88,21 +97,29 @@ export function Sidebar({
   const initial = (user.display_name || user.username || "?").slice(0, 1).toUpperCase();
 
   return (
-    <aside className={`sidebar ${open ? "open" : ""}`}>
+    <aside className={`sidebar ${open ? "open" : ""} ${collapsed ? "collapsed" : ""}`}>
       <div className="sidebar-head">
         <div className="brand">
           <div className="brand-mark">伴</div>
-          <div>
+          <div className="brand-copy">
             <div className="brand-name">伴学</div>
             <div className="brand-sub">AI 学习与生活助手</div>
           </div>
-          <button className="icon-btn sidebar-close" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="关闭侧边栏">
+          <button
+            className="icon-btn sidebar-collapse"
+            onClick={onToggleCollapse}
+            title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+          <button className="icon-btn sidebar-close" onClick={onClose} aria-label="关闭侧边栏">
             <X size={16} />
           </button>
         </div>
 
-        <button className="new-chat" onClick={onNewChat}>
-          <Plus size={16} /> 新建对话
+        <button className="new-chat" onClick={onNewChat} title="新建对话">
+          <Plus size={16} /> <span className="nav-label">新建对话</span>
         </button>
 
         <label className="search-box">
@@ -122,12 +139,14 @@ export function Sidebar({
           </div>
         )}
         {groups.map(([course, items]) => {
-          const isCollapsed = collapsed[course];
+          const isCollapsed = collapsedGroups[course];
           return (
             <div className="course-group" key={course}>
               <button
                 className="course-head"
-                onClick={() => setCollapsed((prev) => ({ ...prev, [course]: !prev[course] }))}
+                onClick={() =>
+                  setCollapsedGroups((prev) => ({ ...prev, [course]: !prev[course] }))
+                }
               >
                 {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                 <GraduationCap size={13} />
@@ -139,20 +158,32 @@ export function Sidebar({
               {!isCollapsed && (
                 <div className="session-list">
                   {items.map((session) => (
-                    <button
+                    <div
+                      className={`session-row ${session.id === activeSessionId ? "active" : ""}`}
                       key={session.id}
-                      className={`session-item ${session.id === activeSessionId ? "active" : ""}`}
-                      onClick={() => {
-                        onSelectSession(session);
-                        onClose();
-                      }}
-                      title={session.title}
                     >
-                      {session.title || "未命名对话"}
-                      <div className="session-date">
-                        {formatSessionDate(session.updated_at)} · {session.message_count} 条
-                      </div>
-                    </button>
+                      <button
+                        className={`session-item ${session.id === activeSessionId ? "active" : ""}`}
+                        onClick={() => {
+                          onSelectSession(session);
+                          onClose();
+                        }}
+                        title={session.title}
+                      >
+                        {session.title || "未命名对话"}
+                        <div className="session-date">
+                          {formatSessionDate(session.updated_at)} · {session.message_count} 条
+                        </div>
+                      </button>
+                      <button
+                        className="session-delete"
+                        onClick={() => onDeleteSession(session)}
+                        title="删除这条历史"
+                        aria-label={`删除 ${session.title || "未命名对话"}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -172,8 +203,9 @@ export function Sidebar({
                 onPage(item.key);
                 onClose();
               }}
+              title={collapsed ? item.label : undefined}
             >
-              <Icon size={15} /> {item.label}
+              <Icon size={15} /> <span className="nav-label">{item.label}</span>
             </button>
           );
         })}

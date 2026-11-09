@@ -1,13 +1,15 @@
-"""学习记录：按科目列出会话、回看消息、改名、删除。"""
+"""学习记录：按科目/模式列出会话、回看消息、改名、删除。"""
+
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.db.base import get_db
-from app.db.models import ChatSession, Message, User
+from app.db.models import ChatSession, Message, Question, User
 
 router = APIRouter()
 
@@ -43,6 +45,7 @@ def _get_own(db: Session, user_id: int, session_id: int) -> ChatSession:
 @router.get("/sessions")
 def list_sessions(
     course: str | None = Query(default=None, description="按科目过滤，例如「算法设计与分析」"),
+    mode: Literal["study", "life"] | None = Query(default=None, description="按学习/生活模式过滤"),
     q: str | None = Query(default=None, description="在标题/消息里搜索关键词"),
     limit: int = Query(default=50, ge=1, le=200),
     user: User = Depends(get_current_user),
@@ -51,6 +54,8 @@ def list_sessions(
     stmt = select(ChatSession).where(ChatSession.user_id == user.id)
     if course:
         stmt = stmt.where(ChatSession.course == course)
+    if mode:
+        stmt = stmt.where(ChatSession.mode == mode)
 
     keyword = (q or "").strip()
     if keyword:
@@ -145,6 +150,14 @@ def delete_session(
     db: Session = Depends(get_db),
 ) -> dict:
     session = _get_own(db, user.id, session_id)
+
+    # 题库里的题要继续保留；只解除它和会话的关联，避免外键挡住删除。
+    unlinked = db.execute(
+        update(Question)
+        .where(Question.session_id == session.id, Question.user_id == user.id)
+        .values(session_id=None)
+    ).rowcount
+
     db.delete(session)
     db.commit()
-    return {"deleted": session_id}
+    return {"deleted": session_id, "unlinked_questions": unlinked}

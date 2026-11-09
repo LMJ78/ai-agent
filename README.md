@@ -2,8 +2,8 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**V3 前端 MVP（React）+ 扫描版 PDF OCR**。
-本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；React 前端能登录、聊天、按科目看历史、管知识库/题库；扫描版 PDF 上传后自动逐页 OCR 入库。
+当前进度：**V3 前端 MVP（React）+ 扫描版 PDF OCR + 历史体验优化**。
+本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；React 前端能登录、聊天、按科目/模式看历史、折叠侧边栏、删除历史、管知识库/题库；扫描版 PDF 上传后自动逐页 OCR 入库。
 
 ---
 
@@ -15,7 +15,7 @@
 | 注册 / 登录 | `POST /api/auth/register`（必须邀请码）/ `POST /api/auth/login`，bcrypt + JWT 7 天 |
 | 用户隔离 | 所有业务接口都从 `Authorization: Bearer <token>` 取当前用户；A 的会话/题目给 B → 404 |
 | 邀请码 | `scripts/create_invite.py` 生成一次性/多次邀请码 |
-| React 前端 | `web/`：登录/注册、聊天、按科目分组历史、知识库、题库；学习/生活双主题；原 Streamlit 保留在 `ui/` 作旧入口 |
+| React 前端 | `web/`：登录/注册、聊天、按科目分组历史、知识库、题库；学习/生活双主题；侧边栏可折叠；历史按学习/生活模式隔离、支持删除；原 Streamlit 保留在 `ui/` 作旧入口 |
 | `POST /api/chat` | 对话接口，SSE 返回 |
 | 工具循环 | 模型要调工具 → 执行 → 结果回填 → 再问，最多 5 轮 |
 | 六个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索）、`memory`（长期记忆） |
@@ -23,7 +23,7 @@
 | 扫描版 PDF OCR | 文字层为空时用 pypdfium2 渲染页面，Qwen-VL 逐页转写；默认最多 80 页、150 DPI |
 | 本地检索 | BM25 + 中文二元组分词；按 `user_id` / `course` 隔离，回答带 `[L1]` 出处 |
 | 科目维度 | 每个会话绑定一个 `course`；检索默认只查这门课，不再把不同科目混在一起 |
-| 学习记录 | `GET /api/sessions?course=...` 按科目列会话，`?q=...` 按关键词搜历史 |
+| 学习记录 | `GET /api/sessions?course=...&mode=study|life` 按科目/模式列会话，`?q=...` 按关键词搜历史；`DELETE` 删除会话时题目保留在题库 |
 | 题目入口 | 粘贴文字、上传 PDF/Word/PPTX、拍照；先存 `draft`，确认/改错后变 `confirmed` |
 | 拍照转写 | Qwen-VL 只做「图 → 文字 + LaTeX」，不解答；图片压缩到长边 1600px |
 | 题目讲解 | `POST /api/chat` 带 `question_id`；未确认的题接口层直接 409 |
@@ -40,9 +40,9 @@
 | 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
 | 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
-| 测试 | 57 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、扫描 PDF OCR、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离 |
+| 测试 | 59 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、扫描 PDF OCR、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离 |
 
-> 已在 Python 3.14 + FastAPI 0.162 下验证：57 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
+> 已在 Python 3.14 + FastAPI 0.162 下验证：59 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
 > V3 前端已用 React + Vite 重写；扫描版 PDF 已用 PIL 生成的图片型 PDF 跑通真实 OCR（1 页入库）。W5 的邀请码、JWT、用户隔离；W3 的拍照与联网验收仍有效：10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。
 
@@ -165,7 +165,7 @@ pnpm dev
 ```
 
 浏览器打开 <http://127.0.0.1:5173>。用刚才注册的账号登录；token 存在 localStorage，刷新不会掉登录。
-页面：聊天、按科目分组的会话历史、知识库、题库；右上角切换学习/生活模式。
+页面：聊天、按科目分组的会话历史、知识库、题库；右上角切换学习/生活模式。侧栏可折叠；历史只显示当前模式；会话右侧垃圾桶可删除（题目会保留在题库）。
 
 > `pnpm dev` 会把 `/api` 和 `/health` 代理到 `http://127.0.0.1:8000`，所以先启动后端。
 > 生产构建：`pnpm build`，产物在 `web/dist/`。
@@ -288,13 +288,26 @@ curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "course=算�
 curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "q=背包"
 ```
 
+只看学习或生活模式的历史：
+
+```powershell
+curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "mode=study"
+curl.exe --get http://127.0.0.1:8000/api/sessions --data-urlencode "mode=life"
+```
+
+删除一条历史（题目会保留在题库）：
+
+```powershell
+curl.exe -X DELETE http://127.0.0.1:8000/api/sessions/15
+```
+
 回看某个会话：
 
 ```powershell
 curl.exe http://127.0.0.1:8000/api/sessions/15/messages
 ```
 
-> 一个会话只属于一门课。如果带着 `session_id` 换科目，接口会返回 409，提示新建会话，避免历史记录串在一起。
+> 一个会话只属于一门课和一个模式。带着 `session_id` 换科目或换学习/生活模式，接口都会返回 409，提示新建会话，避免历史记录串在一起。
 
 ### 8. 录题：粘贴 / 上传 / 拍照
 

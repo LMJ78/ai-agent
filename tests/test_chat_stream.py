@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from app.api import chat as chat_module
 from app.config import settings
 from app.db.base import SessionLocal
-from app.db.models import ChatSession, Message
+from app.db.models import ChatSession, Message, User
 from app.main import app
 
 
@@ -97,6 +97,37 @@ def test_chat_runs_web_search_tool(monkeypatch) -> None:
     second_call = fake.chat.completions.calls[1]["messages"]
     tool_message = next(item for item in second_call if item["role"] == "tool")
     assert "[W1] 动态规划入门" in tool_message["content"]
+
+
+def test_chat_rejects_mode_switch(monkeypatch) -> None:
+    """学习会话不能直接切成生活模式，否则历史会串。"""
+    monkeypatch.setattr(chat_module, "get_client", lambda: FakeClient([]))
+
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            user_id = db.scalar(select(User.id).where(User.username == "demo"))
+            assert user_id is not None
+            session = ChatSession(
+                user_id=user_id,
+                title="模式切换测试",
+                mode="study",
+                course="算法设计与分析",
+            )
+            db.add(session)
+            db.commit()
+            session_id = session.id
+
+        try:
+            resp = client.post(
+                "/api/chat",
+                json={"message": "换成生活模式", "session_id": session_id, "mode": "life"},
+            )
+            assert resp.status_code == 409
+            assert "学习模式" in resp.json()["detail"]
+        finally:
+            with SessionLocal() as db:
+                db.execute(delete(ChatSession).where(ChatSession.id == session_id))
+                db.commit()
 
 
 def test_chat_rejects_other_users_session(monkeypatch) -> None:

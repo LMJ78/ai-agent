@@ -101,8 +101,16 @@ def _get_or_create_session(
             )
         if course and not session.course:
             session.course = course
+
+        # 会话的模式建好就固定，避免学习/生活历史互相串。
         if session.mode != req.mode:
-            session.mode = req.mode
+            current = "学习" if session.mode == "study" else "生活"
+            target = "学习" if req.mode == "study" else "生活"
+            raise HTTPException(
+                status_code=409,
+                detail=f"这个会话属于「{current}模式」，不能当成「{target}模式」继续；请新建一个{target}会话",
+            )
+
         db.commit()
         return session
 

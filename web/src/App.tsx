@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Coffee, GraduationCap, Menu } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Coffee, GraduationCap, Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar, type PageKey } from "./components/Sidebar";
 import { ChatView } from "./components/ChatView";
 import { LoginPage } from "./pages/LoginPage";
@@ -27,7 +27,11 @@ export default function App() {
   const [activeCourse, setActiveCourse] = useState("算法设计与分析");
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionItem | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("ai_agent_sidebar_collapsed") === "1"
+  );
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const sessionsRequest = useRef(0);
 
   const notify = (text: string, kind: "ok" | "error" = "ok") => {
     const id = Date.now() + Math.random();
@@ -37,9 +41,17 @@ export default function App() {
     }, 3600);
   };
 
-  const refreshSessions = async (selectId?: number) => {
+  useEffect(() => {
+    localStorage.setItem("ai_agent_sidebar_collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
+  const refreshSessions = async (selectId?: number, modeOverride?: "study" | "life") => {
+    const requestId = ++sessionsRequest.current;
     try {
-      const data = await api<ChatSession[]>("/api/sessions?limit=100");
+      const targetMode = modeOverride ?? mode;
+      const data = await api<ChatSession[]>(`/api/sessions?limit=100&mode=${targetMode}`);
+      // 快速切换模式时，旧请求可能后返回；只认最后一次。
+      if (requestId !== sessionsRequest.current) return;
       setSessions(data);
       if (selectId != null) {
         const found = data.find((item) => item.id === selectId) || null;
@@ -100,6 +112,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // 切换学习/生活模式时，只拉这个模式的历史。
+  useEffect(() => {
+    if (!user) return;
+    void refreshSessions(undefined, mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, user?.id]);
+
   const handleAuthed = (data: AuthResponse) => {
     setUser(data.user);
     setPage("chat");
@@ -118,6 +137,7 @@ export default function App() {
   const changeMode = (next: "study" | "life") => {
     if (next === mode) return;
     setMode(next);
+    setSessions([]);
     setSelectedQuestion(null);
     if (activeSession) {
       setActiveSession(null);
@@ -138,6 +158,23 @@ export default function App() {
     setSelectedQuestion(null);
     setMode(session.mode === "life" ? "life" : "study");
     if (session.course) setActiveCourse(session.course);
+  };
+
+  const removeSession = async (session: ChatSession) => {
+    const title = session.title || "未命名对话";
+    if (!window.confirm(`删除「${title}」？题目会保留在题库里。`)) return;
+    try {
+      await api(`/api/sessions/${session.id}`, { method: "DELETE" });
+      if (activeSession?.id === session.id) {
+        setActiveSession(null);
+        setSelectedQuestion(null);
+      }
+      await refreshSessions(undefined, mode);
+      notify("已删除这条历史");
+    } catch (err: unknown) {
+      const text = err instanceof ApiError ? err.message : "删除失败，请稍后再试";
+      notify(text, "error");
+    }
   };
 
   const askQuestion = (question: QuestionItem) => {
@@ -171,8 +208,11 @@ export default function App() {
         activeSessionId={activeSession?.id ?? null}
         activePage={page}
         open={sidebarOpen}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
         onClose={() => setSidebarOpen(false)}
         onSelectSession={selectSession}
+        onDeleteSession={(session) => void removeSession(session)}
         onNewChat={newChat}
         onPage={(next) => {
           setPage(next);
@@ -186,11 +226,23 @@ export default function App() {
           <button className="icon-btn mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="打开菜单">
             <Menu size={18} />
           </button>
+          {sidebarCollapsed && (
+            <button
+              className="icon-btn desktop-expand"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="展开侧边栏"
+              title="展开侧边栏"
+            >
+              <PanelLeftOpen size={17} />
+            </button>
+          )}
           <div className="topbar-title">
             <h1>{topTitle}</h1>
             <p>
               {page === "chat"
-                ? `${mode === "study" ? "学习模式" : "生活模式"}${activeCourse ? ` · ${activeCourse}` : ""}`
+                ? `${mode === "study" ? "学习模式" : "生活模式"}${
+                    mode === "study" && activeCourse ? ` · ${activeCourse}` : ""
+                  }`
                 : page === "knowledge"
                   ? "你的资料，只给你自己用"
                   : "按科目归档的题目和原图"}
