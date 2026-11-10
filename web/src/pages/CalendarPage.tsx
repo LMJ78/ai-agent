@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Clock3, LoaderCircle, MapPin, Plus, Trash2, Upload } from "lucide-react";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import type { CalendarEvent } from "../types";
 
 function localInput(date: Date): string {
@@ -31,7 +31,10 @@ export function CalendarPage() {
   });
   const [weekly, setWeekly] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importingImage, setImportingImage] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -70,8 +73,33 @@ export function CalendarPage() {
   const importIcs = async (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    await api<{ imported: number }>("/api/calendar/import", { method: "POST", body: form });
+    const result = await api<{ imported: number }>("/api/calendar/import", {
+      method: "POST",
+      body: form
+    });
+    setImportMsg(`已从 .ics 导入 ${result.imported} 条日程`);
     await load();
+  };
+
+  const importImage = async (file: File) => {
+    setImportingImage(true);
+    setImportMsg("正在识别课表，大约需要 10–30 秒…");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await api<{ imported: number; skipped: number }>(
+        "/api/calendar/import-image",
+        { method: "POST", body: form }
+      );
+      setImportMsg(
+        `已识别并导入 ${result.imported} 门课${result.skipped ? `，跳过 ${result.skipped} 条重复` : ""}`
+      );
+      await load();
+    } catch (err: unknown) {
+      setImportMsg(err instanceof ApiError ? err.message : "课表识别失败，请换一张图");
+    } finally {
+      setImportingImage(false);
+    }
   };
 
   const grouped = events.reduce<Record<string, CalendarEvent[]>>((acc, event) => {
@@ -92,9 +120,30 @@ export function CalendarPage() {
             <h1>日程</h1>
             <p>课表、实验、约会都可以放进来；开始前 30 分钟会尝试推送提醒。</p>
           </div>
-          <button className="btn ghost" onClick={() => fileRef.current?.click()}>
-            <Upload size={14} /> 导入 .ics
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn primary"
+              disabled={importingImage}
+              onClick={() => imageRef.current?.click()}
+            >
+              {importingImage ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />}
+              上传课表图片
+            </button>
+            <button className="btn ghost" onClick={() => fileRef.current?.click()}>
+              <Upload size={14} /> 导入 .ics
+            </button>
+          </div>
+          <input
+            ref={imageRef}
+            type="file"
+            hidden
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void importImage(file);
+              event.target.value = "";
+            }}
+          />
           <input
             ref={fileRef}
             type="file"
@@ -107,6 +156,12 @@ export function CalendarPage() {
             }}
           />
         </div>
+
+        {importMsg && (
+          <p className="faint" style={{ margin: "-4px 0 14px", fontSize: 12.5 }}>
+            {importMsg}
+          </p>
+        )}
 
         <div className="calendar-layout">
           <div className="card">

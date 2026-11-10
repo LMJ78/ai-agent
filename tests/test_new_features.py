@@ -196,6 +196,60 @@ END:VCALENDAR
     assert events[0]["weekday"] == 0
 
 
+def test_timetable_image_import_creates_weekly_events(monkeypatch) -> None:
+    prefix = f"W6课表-{uuid.uuid4().hex[:6]}"
+    _cleanup(prefix)
+
+    async def fake_extract(_path):
+        return [
+            {
+                "title": f"{prefix} 算法课",
+                "weekday": 2,
+                "start_time": "10:00",
+                "end_time": "11:40",
+                "location": "教三-201",
+            }
+        ]
+
+    import app.api.calendar as calendar_api
+
+    monkeypatch.setattr(calendar_api, "extract_timetable", fake_extract)
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/api/calendar/import-image",
+                files={"file": ("timetable.png", b"fake-image", "image/png")},
+            )
+            assert created.status_code == 201
+            body = created.json()
+            assert body["imported"] == 1
+            assert body["events"][0]["title"] == f"{prefix} 算法课"
+            assert body["events"][0]["recurrence"] == "weekly"
+            assert body["events"][0]["weekday"] == 1
+
+            listed = client.get("/api/calendar/events", params={"days": 21})
+            assert any(item["title"] == f"{prefix} 算法课" for item in listed.json())
+
+            duplicate = client.post(
+                "/api/calendar/import-image",
+                files={"file": ("timetable.png", b"fake-image", "image/png")},
+            )
+            assert duplicate.status_code == 400
+            assert "没有可导入的新课程" in duplicate.json()["detail"]
+    finally:
+        _cleanup(prefix)
+
+
+def test_timetable_image_rejects_wrong_type() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/calendar/import-image",
+            files={"file": ("timetable.txt", b"not-an-image", "text/plain")},
+        )
+        assert response.status_code == 400
+        assert "JPG/PNG/WebP" in response.json()["detail"]
+
+
 def test_habit_toggle_and_streak() -> None:
     prefix = f"W6习惯-{uuid.uuid4().hex[:6]}"
     _cleanup(prefix)

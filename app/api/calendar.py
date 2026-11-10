@@ -1,6 +1,8 @@
 """课表 / 日程接口：手动添加 + ICS 导入 + 未来 occurrence 展开。"""
 
+import tempfile
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -8,8 +10,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.vision import (
+    VisionError,
+    VisionNotConfiguredError,
+    extract_timetable,
+)
 from app.core.deps import get_current_user
-from app.core.timeutil import to_local, to_utc
+from app.core.timeutil import CHINA_TZ, to_local, to_utc
 from app.db.base import get_db
 from app.db.models import CalendarEvent, User
 from app.services.calendar import next_occurrence, occurrences_between, parse_ics
@@ -48,6 +55,15 @@ def _event_dict(event: CalendarEvent) -> dict:
         "weekday": event.weekday,
         "note": event.note,
     }
+
+
+def _clock(value: object):
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value.strip(), "%H:%M").time()
+    except ValueError:
+        return None
 
 
 def _own(db: Session, user_id: int, event_id: int) -> CalendarEvent:
@@ -166,6 +182,103 @@ def delete_event(
     db.delete(event)
     db.commit()
     return {"deleted": event_id}
+
+
+@router.post("/calendar/import-image", status_code=201)
+async def import_timetable_image(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(status_code=400, detail="只支持 JPG/PNG/WebP 课表图片")
+    raw = await file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片不能超过 10MB")
+
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(raw)
+            tmp_path = Path(tmp.name)
+        try:
+            items = await extract_timetable(tmp_path)
+        except VisionNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except VisionError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+    if not items:
+        raise HTTPException(status_code=400, detail="没有从图片里识别到课程，请换一张清晰的课表")
+
+    now = datetime.now(CHINA_TZ)
+    existing = {
+        (event.title, event.weekday, to_local(event.start_at).strftime("%H:%M"))
+        for event in db.scalars(
+            select(CalendarEvent).where(CalendarEvent.user_id == user.id)
+        ).all()
+        if event.weekday is not None
+    }
+    created: list[CalendarEvent] = []
+    skipped = 0
+    for item in items[:50]:
+        title = str(item.get("title") or "").strip()[:255]
+        try:
+            weekday = int(item.get("weekday"))
+        except (TypeError, ValueError):
+            continue
+        start_time = _clock(item.get("start_time"))
+        if not title or not start_time or not 1 <= weekday <= 7:
+            continue
+        end_time = _clock(item.get("end_time"))
+        if end_time is None or end_time <= start_time:
+            end_time = (datetime.combine(now.date(), start_time) + timedelta(minutes=90)).time()
+
+        key = (title, weekday - 1, start_time.strftime("%H:%M"))
+        if key in existing:
+            skipped += 1
+            continue
+
+        day = now.date() + timedelta(days=(weekday - 1 - now.weekday()) % 7)
+        start_local = datetime.combine(day, start_time, tzinfo=CHINA_TZ)
+        if start_local < now:
+            start_local += timedelta(days=7)
+        end_local = datetime.combine(start_local.date(), end_time, tzinfo=CHINA_TZ)
+        if end_local <= start_local:
+            end_local = start_local + timedelta(minutes=90)
+
+        event = CalendarEvent(
+            user_id=user.id,
+            title=title,
+            location=str(item.get("location") or "").strip()[:255],
+            course="",
+            start_at=to_utc(start_local),
+            end_at=to_utc(end_local),
+            recurrence="weekly",
+            weekday=weekday - 1,
+            note="从课表图片导入",
+        )
+        db.add(event)
+        created.append(event)
+        existing.add(key)
+
+    if not created:
+        raise HTTPException(
+            status_code=400,
+            detail=f"识别到 {len(items)} 条，但没有可导入的新课程（可能已经导入过）",
+        )
+    db.commit()
+    for event in created:
+        db.refresh(event)
+    return {
+        "imported": len(created),
+        "skipped": skipped,
+        "events": [{**_event_dict(event), "next_at": _iso(next_occurrence(event))} for event in created],
+    }
 
 
 @router.post("/calendar/import")

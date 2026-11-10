@@ -151,6 +151,13 @@ export type CalendarEvent = {
   occurrence_end?: string | null;
 };
 
+export type PushChannelState = {
+  provider: string;
+  configured: boolean;
+  enabled: boolean;
+  token_masked: string;
+};
+
 export type BriefSettings = {
   morning_enabled: boolean;
   morning_time: string;

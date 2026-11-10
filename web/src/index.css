@@ -2236,6 +2236,31 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
+.push-badge {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.push-badge.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.push-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.push-form .input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
 .usage-note {
   margin-top: 16px;
   display: flex;
