@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import select  # noqa: E402
 
 from app.config import DATA_DIR  # noqa: E402
+from app.core.constants import SHARED_USER_ID  # noqa: E402
 from app.db.base import SessionLocal  # noqa: E402
 from app.db.init import init_db  # noqa: E402
 from app.db.models import Document, User  # noqa: E402
@@ -25,12 +26,12 @@ DEFAULT_ROOT = DATA_DIR / "course_materials" / "算法设计与分析"
 DEFAULT_COURSE = "算法设计与分析"
 
 
-def _demo_user_id() -> int:
+def _shared_user_id() -> int:
     with SessionLocal() as db:
-        user_id = db.scalar(select(User.id).where(User.username == "demo"))
-    if user_id is None:
-        raise SystemExit("找不到 demo 用户，先启动一次服务让 init_db() 建用户")
-    return user_id
+        user = db.get(User, SHARED_USER_ID)
+    if user is None:
+        raise SystemExit("找不到公共资料用户，先启动一次服务让 init_db() 建用户")
+    return SHARED_USER_ID
 
 
 def _collect(root: Path, chapters: set[str]) -> list[Path]:
@@ -75,8 +76,8 @@ def main() -> None:
     if not files:
         raise SystemExit("没有找到匹配的课件")
 
-    user_id = _demo_user_id()
-    print(f"待导入 {len(files)} 个文件，用户 #{user_id}，课程「{args.course}」")
+    user_id = _shared_user_id()
+    print(f"待导入 {len(files)} 个文件，公共资料库，课程「{args.course}」")
     if args.dry_run:
         for path in files:
             print("DRY", path.relative_to(args.root))

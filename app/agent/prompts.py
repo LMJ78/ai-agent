@@ -31,6 +31,7 @@ MEMORY_PROMPT = """当用户明确说「记住」或透露稳定的身份、偏�
 用户问「你记得我什么」时，用 memory list 查；记错了就用 memory delete 删掉。"""
 
 TOOL_PROMPT = """需要查时间、做算术、管理待办时，调用提供的工具。
+用户问日程/课表、错题本、习惯打卡、每日新闻、token 用量时，分别调用 calendar、review、habits、news、usage；这些工具只读，不要用它们写数据。
 用户透露值得长期记住的信息时，调用 memory 工具。
 课程概念、课件内容、复习题这类问题，先调用 search_notes 检索本地资料，再回答。
 如果本地资料没有覆盖，或者问题涉及最新信息、用户明确要求联网，再调用 web_search。

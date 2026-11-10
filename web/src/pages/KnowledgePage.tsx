@@ -177,9 +177,13 @@ export function KnowledgePage({ courses, onChanged, notify }: Props) {
                       </div>
                     </div>
                     <span className={`badge ${doc.status === "ready" ? "ok" : ""}`}>{doc.status}</span>
-                    <button className="icon-btn" onClick={() => void remove(doc)} title="删除">
-                      <Trash2 size={14} />
-                    </button>
+                    {doc.is_shared ? (
+                      <span className="badge">公共</span>
+                    ) : (
+                      <button className="icon-btn" onClick={() => void remove(doc)} title="删除">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

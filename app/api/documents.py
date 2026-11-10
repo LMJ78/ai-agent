@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.agent.vision import VisionError, VisionNotConfiguredError
+from app.core.constants import SHARED_USER_ID
 from app.core.deps import get_current_user
 from app.db.base import get_db
 from app.db.models import Chunk, Document, User
@@ -77,7 +78,7 @@ def get_documents(
     if ids:
         rows = db.execute(
             select(Chunk.document_id, func.count(Chunk.id))
-            .where(Chunk.document_id.in_(ids), Chunk.user_id == user.id)
+            .where(Chunk.document_id.in_(ids))
             .group_by(Chunk.document_id)
         ).all()
         counts = {document_id: count for document_id, count in rows}
@@ -90,6 +91,7 @@ def get_documents(
             "chapter": doc.chapter,
             "status": doc.status,
             "chunks": counts.get(doc.id, 0),
+            "is_shared": doc.user_id == SHARED_USER_ID,
             "created_at": doc.created_at.isoformat() if doc.created_at else "",
         }
         for doc in docs
@@ -105,7 +107,7 @@ def document_file(
     doc = db.scalar(
         select(Document).where(
             Document.id == document_id,
-            Document.user_id == user.id,
+            Document.user_id.in_([user.id, SHARED_USER_ID]),
         )
     )
     if doc is None:

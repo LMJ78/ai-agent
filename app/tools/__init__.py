@@ -6,6 +6,13 @@ from typing import Any
 
 from app.tools.base import BaseTool, ToolError, ToolResult
 from app.tools.calculator import CalculatorTool
+from app.tools.data import (
+    CalendarTool,
+    HabitsTool,
+    NewsTool,
+    ReviewTool,
+    UsageTool,
+)
 from app.tools.memory import MemoryTool
 from app.tools.search_notes import SearchNotesTool
 from app.tools.time import TimeTool
@@ -21,6 +28,11 @@ _TOOL_LIST: list[BaseTool] = [
     MemoryTool(),
     SearchNotesTool(),
     WebSearchTool(),
+    CalendarTool(),
+    ReviewTool(),
+    HabitsTool(),
+    NewsTool(),
+    UsageTool(),
 ]
 TOOLS: dict[str, BaseTool] = {tool.name: tool for tool in _TOOL_LIST}
 

@@ -2,7 +2,7 @@
 
 一个面向大学生的 AI Agent：**学习助手 + 生活伴侣**。
 
-当前进度：**V3 前端 MVP（React）+ 扫描版 PDF OCR + 七项学习/生活增强**。
+当前进度：**V3 前端 MVP（React）+ 扫描版 PDF OCR + 七项学习/生活增强 + 全量课件/数据工具**。
 本阶段目标：邀请码注册、JWT 登录、所有接口按用户隔离；React 前端能登录、聊天、按科目/模式看历史、折叠侧边栏、删除历史、管知识库/题库；扫描版 PDF 上传后自动逐页 OCR 入库；错题本、日程提醒、早晚简报、引用预览、用量、费曼、习惯打卡全部可用。
 
 ---
@@ -18,10 +18,11 @@
 | React 前端 | `web/`：登录/注册、聊天、按科目分组历史、知识库、题库；学习/生活双主题；侧边栏可折叠；历史按学习/生活模式隔离、支持删除；原 Streamlit 保留在 `ui/` 作旧入口 |
 | `POST /api/chat` | 对话接口，SSE 返回 |
 | 工具循环 | 模型要调工具 → 执行 → 结果回填 → 再问，最多 5 轮 |
-| 六个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索）、`memory`（长期记忆） |
+| 十一个工具 | 时间、计算器、待办、`search_notes`（课程资料检索）、`web_search`（Tavily 联网检索）、`memory`（长期记忆），以及五个只读数据工具：`calendar`（日程）、`review`（错题本）、`habits`（习惯）、`news`（每日新闻）、`usage`（用量） |
 | 课程资料 | 上传 PDF / DOCX / PPTX / MD / TXT，解析后存入 `chunks` 表；扫描版 PDF 自动逐页 OCR |
 | 扫描版 PDF OCR | 文字层为空时用 pypdfium2 渲染页面，Qwen-VL 逐页转写；默认最多 80 页、150 DPI |
-| 本地检索 | BM25 + 中文二元组分词；按 `user_id` / `course` 隔离，回答带 `[L1]` 出处 |
+| 本地检索 | BM25 + 中文二元组分词；个人资料 + 公共课程资料（`user_id=0`）一起检索，按 `course` 过滤，回答带 `[L1]` 出处 |
+| 公共课程资料 | 61 个 PPTX 全量入库（ch01–ch10），所有登录用户都能检索；个人上传的资料仍然只给自己看 |
 | 科目维度 | 每个会话绑定一个 `course`；检索默认只查这门课，不再把不同科目混在一起 |
 | 学习记录 | `GET /api/sessions?course=...&mode=study|life` 按科目/模式列会话，`?q=...` 按关键词搜历史；`DELETE` 删除会话时题目保留在题库 |
 | 题目入口 | 粘贴文字、上传 PDF/Word/PPTX、拍照；先存 `draft`，确认/改错后变 `confirmed` |
@@ -43,17 +44,17 @@
 | 手机推送 | PushPlus token 配置、测试发送；失败重试 3 次，成功写 `reminded_at` 去重 |
 | L3 自测 | 按课程/章节出 1–10 道选择题，提交后判分 + 解析 + `[L]` 出处 |
 | 联网检索 | 本地课件没覆盖时调用 `web_search`（Tavily），回答带 `[W1]` 出处；本地优先，冲突以课件为准 |
-| 批量导入 | `scripts/ingest_course.py` 导入 ch01–ch10 课件，优先 PPTX |
+| 批量导入 | `scripts/ingest_course.py` 导入 ch01–ch10 课件到公共资料库，优先 PPTX；61 个 PPTX 已全部入库 |
 | 扩展自检 | `scripts/check_w3_extras.py` 检查拍照/联网 Key，并可真实跑一张图/一次搜索 |
 | W3 验收 | `scripts/w3_acceptance.py` 生成 10 张印刷体题目截图、跑 6 个问题，报告写到 `data/acceptance/w3_report.md` |
 | 工具 trace | SSE 里会发 `tool_call` / `tool_result` 事件 |
 | 会话与消息落库 | `chat_sessions` / `messages`，都带 `user_id` |
 | 友好错误 | 没配 Key 返回 503；工具报错转成文本，不崩整个请求 |
-| 测试 | 74 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、扫描 PDF OCR、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离、错题复习、手动错题/回忆卡、周重复日程、ICS、习惯、用量、结构化引用、费曼、过期日程不补发、每日新闻缓存与 3 天清理 |
+| 测试 | 80 个用例：健康检查、流式落库、工具循环、计算器、待办、RAG、上传/删除、学习记录、题目确认、解题阶段、自测判分、联网检索、图片压缩、扫描 PDF OCR、情绪、记忆、推送、提醒、注册登录、邀请码、越权隔离、错题复习、手动错题/回忆卡、周重复日程、ICS、习惯、用量、结构化引用、费曼、过期日程不补发、每日新闻缓存与 3 天清理、公共资料检索、五个只读数据工具 |
 
-> 已在 Python 3.14 + FastAPI 0.162 下验证：74 个测试全过；ch01–ch03 共 18 份课件已入库（390 个 chunk），真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
+> 已在 Python 3.14 + FastAPI 0.162 下验证：80 个测试全过；ch01–ch10 共 61 个 PPTX（62 份文档，含 1 份 PDF）已入公共资料库，共 1329 个 chunk；`lmj7878`、`reactdemo` 等普通用户都能检索到公共课件，真实提问「0-1 背包的状态转移方程」会先调 `search_notes`，回答带 `[L3]` 引用；真实 DeepSeek 已能按 ch03 出 2 道自测题。
 >
-> V3 前端已用 React + Vite 重写；扫描版 PDF 已用 PIL 生成的图片型 PDF 跑通真实 OCR（1 页入库）。W5 的邀请码、JWT、用户隔离；W3 的拍照与联网验收仍有效：10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。W6 新增的错题本、日程、简报、引用、用量、费曼、习惯已接前后端，真实引用/费曼链路跑通；课表图片识别和 PushPlus 设置入口已补齐；每日新闻改为站内页（5 个方向 × 2 条，保留 3 天，不再推送），`pytest` **74 passed**。
+> V3 前端已用 React + Vite 重写；扫描版 PDF 已用 PIL 生成的图片型 PDF 跑通真实 OCR（1 页入库）。W5 的邀请码、JWT、用户隔离；W3 的拍照与联网验收仍有效：10 张印刷体截图 **10/10 可读**，6 个问题 **6/6 通过**，本地 `[L]` 引用 **4/4**。W6 新增的错题本、日程、简报、引用、用量、费曼、习惯已接前后端，真实引用/费曼链路跑通；课表图片识别和 PushPlus 设置入口已补齐；每日新闻改为站内页（5 个方向 × 2 条，保留 3 天，不再推送）；新增公共课程资料和五个只读数据工具（日程/错题本/习惯/新闻/用量），`pytest` **80 passed**。
 
 **已知限制**：
 - 早晚简报、日程提醒依赖 PushPlus 通道；没配 token 时只生成内容，不会真的推送。
@@ -516,8 +517,10 @@ ai-agent/
 │   │   ├── time.py        # 当前时间
 │   │   ├── calculator.py  # 安全计算器
 │   │   ├── todo.py        # 待办 CRUD
-│   │   ├── search_notes.py# 课程资料检索
-│   │   └── web_search.py  # Tavily 联网检索
+│   │   ├── search_notes.py# 课程资料检索（个人 + 公共）
+│   │   ├── web_search.py  # Tavily 联网检索
+│   │   ├── memory.py      # 长期记忆
+│   │   └── data.py        # 五个只读数据工具：日程/错题/习惯/新闻/用量
 │   ├── rag/
 │   │   ├── parser.py      # PDF/PPTX/DOCX/MD/TXT 解析；扫描 PDF 走 OCR
 │   │   ├── tokenizer.py   # 中文二元组分词
@@ -568,7 +571,7 @@ ai-agent/
 
 ## 本周验收（W3）
 
-- [x] `pytest -q` 显示 `74 passed`（W6/W7 后；W3 当时为 32）
+- [x] `pytest -q` 显示 `80 passed`（W6/W7 后；W3 当时为 32）
 - [ ] 启动服务后，`POST /api/documents` 能上传一份 PPTX/MD 并返回 chunk 数
 - [ ] `GET /api/documents` 能看到刚上传的资料
 - [ ] 带 `course` 提问后，会话绑定这门课；`GET /api/sessions?course=...` 能查到
@@ -601,7 +604,7 @@ python scripts/w3_acceptance.py
 - [x] 人工核对 10 道答案 10/10 通过（验收单 `docs/W4-10题验收单.md`；完整对话 `data/acceptance/w4/q01.md` … `q10.md`）
 - [x] PushPlus 测试消息能收到
 - [x] 连续 10 条待办到点提醒都能收到（10/10）
-- [x] `pytest -q` 显示 `74 passed`（W6/W7 后；W4 当时为 48）
+- [x] `pytest -q` 显示 `80 passed`（W6/W7 后；W4 当时为 48）
 
 W4 十题报告：`data/acceptance/w4_report.md`；每道题的完整 hint/step/answer 在 `data/acceptance/w4/`；人工核对用 `docs/W4-10题验收单.md`。
 
@@ -620,7 +623,7 @@ python scripts/w4_push_acceptance.py --count 10 --interval 10 --wait 240
 
 ## 本周验收（W6）
 
-- [x] `pytest -q` → **74 passed**（1 个 Starlette httpx warning）
+- [x] `pytest -q` → **80 passed**（1 个 Starlette httpx warning）
 - [x] `cd web; pnpm build` → 通过（1865 modules，JS 约 671 KB）
 - [x] 错题本：自测答错自动入库；聊天回答下方可手动加入（含无选项回忆卡）；按 3/7/14/30 天复习，连续 3 次答对变「已掌握」
 - [x] 日程：手动添加、每周重复、`.ics` 导入、删除；未来 30 天按日期分组

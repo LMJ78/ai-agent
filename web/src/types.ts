@@ -59,6 +59,7 @@ export type DocumentItem = {
   chapter: string;
   status: string;
   chunks: number;
+  is_shared: boolean;
   created_at: string;
 };
 

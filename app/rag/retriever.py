@@ -10,6 +10,7 @@ import math
 
 from sqlalchemy import select
 
+from app.core.constants import SHARED_USER_ID
 from app.db.base import SessionLocal
 from app.db.models import Chunk
 from app.rag.tokenizer import tokenize
@@ -39,7 +40,8 @@ def search_chunks(
         return []
 
     with SessionLocal() as db:
-        stmt = select(Chunk).where(Chunk.user_id == user_id)
+        # 个人上传的资料 + 公共课程资料都能检索。
+        stmt = select(Chunk).where(Chunk.user_id.in_([user_id, SHARED_USER_ID]))
         if course:
             stmt = stmt.where(Chunk.course == course)
         if chapter:

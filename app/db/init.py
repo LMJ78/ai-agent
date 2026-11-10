@@ -2,6 +2,7 @@
 
 from sqlalchemy import select
 
+from app.core.constants import SHARED_USER_ID, SHARED_USERNAME
 from app.db.base import Base, SessionLocal, engine
 from app.db.models import User
 
@@ -58,6 +59,19 @@ def init_db() -> None:
     _ensure_columns()
 
     with SessionLocal() as db:
+        shared = db.get(User, SHARED_USER_ID)
+        if shared is None:
+            db.add(
+                User(
+                    id=SHARED_USER_ID,
+                    username=SHARED_USERNAME,
+                    display_name="公共课程资料",
+                    role="system",
+                    is_active=False,
+                )
+            )
+            db.commit()
+
         exists = db.scalar(select(User).where(User.username == DEMO_USERNAME))
         if exists is None:
             db.add(

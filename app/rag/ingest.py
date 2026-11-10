@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import delete, select
 
 from app.config import DATA_DIR
+from app.core.constants import SHARED_USER_ID
 from app.db.base import SessionLocal
 from app.db.models import Chunk, Document
 from app.rag.parser import ParseError, ParsedChunk, parse_file, parse_file_async
@@ -121,12 +122,14 @@ def _store_parsed(
         return document, chunk_count
 
 
-def list_documents(user_id: int) -> list[Document]:
+def list_documents(user_id: int, *, include_shared: bool = True) -> list[Document]:
+    """列出个人资料；默认同时返回所有学生共用的课程资料。"""
     with SessionLocal() as db:
+        owners = [user_id, SHARED_USER_ID] if include_shared else [user_id]
         return list(
             db.scalars(
                 select(Document)
-                .where(Document.user_id == user_id)
+                .where(Document.user_id.in_(owners))
                 .order_by(Document.id.desc())
             ).all()
         )
