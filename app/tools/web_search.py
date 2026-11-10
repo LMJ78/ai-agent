@@ -25,10 +25,13 @@ async def search_web(
     max_results: int = 5,
     *,
     client: httpx.AsyncClient | None = None,
+    topic: str | None = None,
+    days: int | None = None,
 ) -> list[dict[str, Any]]:
     """调用 Tavily，返回原始结果列表。
 
     client 参数只用于测试注入 MockTransport；正常调用不传。
+    topic="news" 时走新闻检索，days 限制最近天数（每日新闻用）。
     """
     key = settings.tavily_api_key.strip()
     if not key or key.startswith("tvly-xxx"):
@@ -37,13 +40,17 @@ async def search_web(
             "本地课件检索 search_notes 不受影响。"
         )
 
-    payload = {
+    payload: dict[str, Any] = {
         "query": query,
         "search_depth": "basic",
         "max_results": max_results,
         "include_answer": False,
         "include_raw_content": False,
     }
+    if topic:
+        payload["topic"] = topic
+    if days:
+        payload["days"] = days
     headers = {"Authorization": f"Bearer {key}"}
     url = f"{settings.tavily_base_url.rstrip('/')}/search"
 

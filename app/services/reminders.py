@@ -13,6 +13,7 @@ from app.db.base import SessionLocal
 from app.db.models import CalendarEvent, Todo
 from app.services.briefs import send_due_briefs
 from app.services.calendar import next_occurrence
+from app.services.news import purge_all_old_news
 from app.services.push import PushError, PushNotConfiguredError, send_to_user
 from app.tools.time import CHINA_TZ
 
@@ -131,6 +132,7 @@ async def reminder_loop() -> None:
             if event_result["sent"] or event_result["failed"]:
                 logger.info("日程提醒扫描：%s", event_result)
             await send_due_briefs()
+            purge_all_old_news()
         except asyncio.CancelledError:
             raise
         except Exception:

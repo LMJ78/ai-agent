@@ -9,7 +9,6 @@ from app.core.timeutil import CHINA_TZ, at_local_day, local_date, parse_hhmm
 from app.db.models import CalendarEvent, ReviewItem, Todo, User, UserSettings
 from app.services.calendar import occurrences_between
 from app.services.push import PushError, PushNotConfiguredError, send_to_user
-from app.tools.web_search import search_web
 
 
 def get_or_create_settings(db: Session, user_id: int) -> UserSettings:
@@ -60,20 +59,6 @@ async def build_morning_brief(db: Session, user: User, cfg: UserSettings) -> tup
     lines.extend(
         [f"- {todo.title}" for todo in todos] or ["- 没有到期的待办。"]
     )
-
-    if cfg.news_topics.strip():
-        try:
-            results = await search_web(
-                f"今天值得关注的新闻：{cfg.news_topics.strip()}", max_results=3
-            )
-            if results:
-                lines.extend(["", "给你挑的几条新闻："])
-                for index, item in enumerate(results, start=1):
-                    lines.append(f"[W{index}] {item.get('title', '')}")
-                    lines.append(str(item.get("url", "")))
-        except Exception:  # noqa: BLE001
-            # 新闻失败不影响简报主体。
-            pass
 
     lines.extend(["", "今天也一起把最重要的一件事做好。"])
     return "早上好，今天的安排来了", "\n".join(lines)

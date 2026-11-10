@@ -7,6 +7,7 @@ import { KnowledgePage } from "./pages/KnowledgePage";
 import { QuestionBankPage } from "./pages/QuestionBankPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { CalendarPage } from "./pages/CalendarPage";
+import { NewsPage } from "./pages/NewsPage";
 import { HabitsPage } from "./pages/HabitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ApiError, api, clearAuth, getStoredUser, getToken, me } from "./lib/api";
@@ -143,7 +144,7 @@ export default function App() {
     setMode(next);
     setSessions([]);
     setSelectedQuestion(null);
-    const validPages = next === "life" ? ["chat", "calendar", "habits", "settings"] : ["chat", "review", "knowledge", "questions"];
+    const validPages = next === "life" ? ["chat", "news", "calendar", "habits", "settings"] : ["chat", "review", "knowledge", "questions"];
     if (!validPages.includes(page)) setPage("chat");
     if (activeSession) {
       setActiveSession(null);
@@ -196,6 +197,7 @@ export default function App() {
     if (page === "knowledge") return "知识库";
     if (page === "questions") return "题库";
     if (page === "review") return "错题本";
+    if (page === "news") return "每日新闻";
     if (page === "calendar") return "日程";
     if (page === "habits") return "习惯";
     if (page === "settings") return "设置与用量";
@@ -206,6 +208,7 @@ export default function App() {
     if (page === "knowledge") return "你的资料，只给你自己用";
     if (page === "questions") return "按科目归档的题目和原图";
     if (page === "review") return "答错的题，过几天再来一次";
+    if (page === "news") return "每天五个方向，只看最近三天";
     if (page === "calendar") return "课表、实验和约会，提前提醒";
     if (page === "habits") return "每天一点，连续天数自己会说话";
     if (page === "settings") return "早晚简报与 token 用量";
@@ -312,6 +315,7 @@ export default function App() {
             />
           )}
           {page === "review" && <ReviewPage />}
+          {page === "news" && <NewsPage />}
           {page === "calendar" && <CalendarPage />}
           {page === "habits" && <HabitsPage />}
           {page === "settings" && <SettingsPage notify={notify} />}

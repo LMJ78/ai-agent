@@ -10,6 +10,7 @@ import {
   ListChecks,
   LogOut,
   MessageSquare,
+  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -26,6 +27,7 @@ export type PageKey =
   | "review"
   | "knowledge"
   | "questions"
+  | "news"
   | "calendar"
   | "habits"
   | "settings";
@@ -56,6 +58,7 @@ const STUDY_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[]
 
 const LIFE_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[] = [
   { key: "chat", label: "聊天", icon: MessageSquare },
+  { key: "news", label: "每日新闻", icon: Newspaper },
   { key: "calendar", label: "日程", icon: CalendarDays },
   { key: "habits", label: "习惯", icon: ListChecks },
   { key: "settings", label: "设置与用量", icon: Settings }

@@ -197,15 +197,9 @@ export function SettingsPage({ notify }: Props) {
                 </button>
               </div>
 
-              <div className="field">
-                <label>新闻主题（可选）</label>
-                <input
-                  className="input"
-                  value={cfg.news_topics}
-                  onChange={(event) => setCfg({ ...cfg, news_topics: event.target.value })}
-                  placeholder="例如：AI、算法竞赛、科技"
-                />
-              </div>
+              <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                每日新闻已移到「生活 → 每日新闻」，不再随早报推送到手机。
+              </p>
               <button className="btn primary" disabled={saving} onClick={() => void save()}>
                 {saving ? <LoaderCircle className="spin" size={14} /> : null}
                 保存设置

@@ -193,3 +193,28 @@ export type UsageSummary = {
   total_cost_yuan: number;
   series: UsageDay[];
 };
+
+export type NewsItem = {
+  id: number;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  published_at: string;
+};
+
+export type NewsCategory = {
+  name: string;
+  items: NewsItem[];
+};
+
+export type NewsDay = {
+  date: string;
+  categories: NewsCategory[];
+};
+
+export type NewsResponse = {
+  days: NewsDay[];
+  retention_days: number;
+  warning: string;
+};

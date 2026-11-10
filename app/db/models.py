@@ -359,3 +359,26 @@ class HabitLog(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     log_date: Mapped[date] = mapped_column(Date, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NewsItem(Base):
+    """每日新闻缓存：按用户、日期、分类存，超过 3 天自动清理。"""
+
+    __tablename__ = "news_items"
+    __table_args__ = (
+        UniqueConstraint("user_id", "news_date", "url", name="uq_news_user_date_url"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    news_date: Mapped[date] = mapped_column(Date, index=True)
+    category: Mapped[str] = mapped_column(String(32), index=True)
+    title: Mapped[str] = mapped_column(String(500))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(1000))
+    source: Mapped[str] = mapped_column(String(128), default="")
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
