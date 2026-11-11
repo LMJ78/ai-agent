@@ -2896,3 +2896,287 @@ a {
     flex: 1;
   }
 }
+
+/* 知识库：按科目分组 + 课件预览 */
+.knowledge-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.knowledge-group {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.knowledge-group-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.knowledge-group-head:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.knowledge-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--accent);
+}
+
+.knowledge-group-title strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-chevron {
+  color: var(--muted);
+  transition: transform 0.16s ease;
+  flex: 0 0 auto;
+}
+
+.knowledge-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.knowledge-group-list {
+  padding: 0 10px 10px;
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.file-action {
+  border: 1px solid transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.file-action:hover {
+  border-color: var(--accent);
+}
+
+.knowledge-preview {
+  width: min(1100px, 96vw);
+  height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.knowledge-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.knowledge-preview-head .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.knowledge-preview-title {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.knowledge-preview-title strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-preview-title span {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-preview-body {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.knowledge-preview-body iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.pdf-viewer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #eef1f6;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex: 0 0 auto;
+}
+
+.pdf-toolbar .btn {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.pdf-page-count {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 78px;
+  text-align: center;
+}
+
+.pdf-zoom {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pdf-zoom .icon-btn {
+  border-radius: 0;
+  font-size: 16px;
+  width: 28px;
+  height: 26px;
+}
+
+.pdf-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  text-align: center;
+}
+
+.pdf-canvas img {
+  display: block;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
+}
+
+.pdf-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(238, 241, 246, 0.72);
+  color: var(--accent);
+}
+
+.knowledge-preview-body pre {
+  margin: 0;
+  padding: 20px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.knowledge-preview-center {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.knowledge-preview-center strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.knowledge-preview-center p {
+  max-width: 440px;
+  margin: 0;
+  line-height: 1.7;
+  font-size: 12px;
+}
+
+.knowledge-preview-error {
+  color: var(--danger);
+}
+
+@media (max-width: 700px) {
+  .knowledge-group-list .file-row {
+    flex-wrap: wrap;
+  }
+
+  .knowledge-group-list .file-main {
+    flex-basis: calc(100% - 50px);
+  }
+
+  .knowledge-group-list .file-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .knowledge-preview {
+    width: 100%;
+    height: 92vh;
+  }
+
+  .knowledge-preview-head .btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}

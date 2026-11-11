@@ -60,6 +60,8 @@ export type DocumentItem = {
   status: string;
   chunks: number;
   is_shared: boolean;
+  preview_kind: "pdf" | "text" | "none";
+  preview_name: string;
   created_at: string;
 };
 

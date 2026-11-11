@@ -246,7 +246,7 @@ export default function App() {
   }, [page, activeSession, selectedQuestion]);
 
   const pageSubtitle = useMemo(() => {
-    if (page === "knowledge") return "你的资料，只给你自己用";
+    if (page === "knowledge") return "公共课件 + 你的资料，按科目归档";
     if (page === "questions") return "按科目归档的题目和原图";
     if (page === "review") return "答错的题，过几天再来一次";
     if (page === "news") return "每天五个方向，只看最近三天";
