@@ -2353,6 +2353,23 @@ a {
   gap: 12px;
 }
 
+.choice-edit-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.choice-edit-row {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.choice-edit-row b {
+  color: var(--accent);
+  text-align: center;
+}
+
 .recall-box {
   margin-top: 10px;
 }

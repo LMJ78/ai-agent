@@ -30,6 +30,7 @@ pytest-of-*/
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
+.vite/
 web/vite.config.js
 web/vite.config.d.ts
 web/.tmp-ui-*.mjs

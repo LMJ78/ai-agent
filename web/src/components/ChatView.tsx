@@ -26,13 +26,54 @@ import { Markdown } from "./Markdown";
 type UiMessage = ChatMessage & { key: string; questionText?: string };
 type Stage = "auto" | "hint" | "step" | "answer";
 type ReviewDraft = {
+  kind: "recall" | "choice";
   question: string;
   answer: string;
   explanation: string;
   course: string;
   chapter: string;
   source: string;
+  options: string[];
+  correctAnswer: string;
 };
+
+const LETTERS = ["A", "B", "C", "D"];
+
+// 错题本用纯文本展示，保存前去掉常见的 Markdown 标记，避免题干里出现 ** 或 #。
+function stripMarkdown(value: string): string {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .trim();
+}
+
+function parseChoiceDraft(text: string): Pick<ReviewDraft, "question" | "options" | "correctAnswer"> | null {
+  const lines = text.split(/\r?\n/);
+  const found: { letter: string; text: string; index: number }[] = [];
+  lines.forEach((line, index) => {
+    const match = line.match(/^\s*(?:[-*]\s*)?\**([A-D])[.、．]\s*(.+?)\s*$/);
+    if (match && !found.some((item) => item.letter === match[1])) {
+      found.push({ letter: match[1], text: match[2].replace(/\**$/, "").trim(), index });
+    }
+  });
+  if (found.length < 4) return null;
+  const answerMatch = text.match(/(?:正确答案|答案)\s*[：:]\s*\**([A-D])\b/);
+  if (!answerMatch) return null;
+
+  const firstOption = found.sort((a, b) => a.index - b.index)[0];
+  const before = lines.slice(0, firstOption.index).join("\n");
+  const questionMatch = before.match(/(?:题目(?:（[^）]*）)?\s*\**\s*:?\s*\n+)([\s\S]+)$/);
+  const question = (questionMatch?.[1] || before).replace(/^\s*[-*]\s*/gm, "").trim();
+
+  return {
+    question: stripMarkdown(question).slice(0, 4000),
+    options: LETTERS.map((letter) => stripMarkdown(found.find((item) => item.letter === letter)?.text || "")),
+    correctAnswer: answerMatch[1]
+  };
+}
+
 
 type Props = {
   mode: "study" | "life";
@@ -279,13 +320,18 @@ export function ChatView({
     const previousUser = [...messages.slice(0, index)]
       .reverse()
       .find((item) => item.role === "user");
+    const parsed = parseChoiceDraft(message.content);
+    const fallbackQuestion = message.questionText || previousUser?.content || "";
     setReviewDraft({
-      question: message.questionText || previousUser?.content || "",
-      answer: message.content,
-      explanation: "",
+      kind: parsed ? "choice" : "recall",
+      question: parsed?.question || fallbackQuestion,
+      answer: parsed ? "" : message.content,
+      explanation: parsed ? message.content : "",
       course: currentCourse,
       chapter: "",
-      source: "聊天 · 手动加入"
+      source: "聊天 · 手动加入",
+      options: parsed?.options || ["", "", "", ""],
+      correctAnswer: parsed?.correctAnswer || ""
     });
     setReviewTargetKey(message.key);
     setReviewError("");
@@ -297,12 +343,31 @@ export function ChatView({
       setReviewError("题目不能为空，补一句题干再保存。");
       return;
     }
+    const isChoice = reviewDraft.kind === "choice";
+    if (isChoice) {
+      if (reviewDraft.options.some((option) => !option.trim())) {
+        setReviewError("选择题要把 A–D 四个选项都填上。");
+        return;
+      }
+      if (!reviewDraft.correctAnswer) {
+        setReviewError("请选择正确答案。");
+        return;
+      }
+    }
     setReviewSaving(true);
     setReviewError("");
     try {
       await api("/api/review/items", {
         method: "POST",
-        body: JSON.stringify({ ...reviewDraft, options: [] })
+        body: JSON.stringify({
+          question: stripMarkdown(reviewDraft.question),
+          answer: isChoice ? reviewDraft.correctAnswer : stripMarkdown(reviewDraft.answer),
+          explanation: stripMarkdown(reviewDraft.explanation),
+          course: reviewDraft.course,
+          chapter: reviewDraft.chapter,
+          source: reviewDraft.source,
+          options: isChoice ? reviewDraft.options.map(stripMarkdown) : []
+        })
       });
       if (reviewTargetKey) {
         setReviewSaved((prev) => ({ ...prev, [reviewTargetKey]: true }));
@@ -574,6 +639,21 @@ export function ChatView({
 
             {reviewError && <div className="error-banner">{reviewError}</div>}
 
+            <div className="tab-row" style={{ marginBottom: 12 }}>
+              <button
+                className={`tab ${reviewDraft.kind === "recall" ? "active" : ""}`}
+                onClick={() => setReviewDraft({ ...reviewDraft, kind: "recall" })}
+              >
+                回忆卡
+              </button>
+              <button
+                className={`tab ${reviewDraft.kind === "choice" ? "active" : ""}`}
+                onClick={() => setReviewDraft({ ...reviewDraft, kind: "choice" })}
+              >
+                选择题
+              </button>
+            </div>
+
             <label className="field-label">题目</label>
             <textarea
               className="field-input review-textarea"
@@ -582,13 +662,53 @@ export function ChatView({
               onChange={(event) => setReviewDraft({ ...reviewDraft, question: event.target.value })}
             />
 
-            <label className="field-label">参考答案（可留空，自己回忆时用）</label>
-            <textarea
-              className="field-input review-textarea"
-              rows={4}
-              value={reviewDraft.answer}
-              onChange={(event) => setReviewDraft({ ...reviewDraft, answer: event.target.value })}
-            />
+            {reviewDraft.kind === "recall" ? (
+              <>
+                <label className="field-label">参考答案（可留空，自己回忆时用）</label>
+                <textarea
+                  className="field-input review-textarea"
+                  rows={4}
+                  value={reviewDraft.answer}
+                  onChange={(event) => setReviewDraft({ ...reviewDraft, answer: event.target.value })}
+                />
+              </>
+            ) : (
+              <>
+                <label className="field-label">选项（A–D 都要填）</label>
+                <div className="choice-edit-grid">
+                  {reviewDraft.options.map((option, index) => (
+                    <label className="choice-edit-row" key={LETTERS[index]}>
+                      <b>{LETTERS[index]}</b>
+                      <input
+                        className="field-input"
+                        value={option}
+                        onChange={(event) => {
+                          const options = [...reviewDraft.options];
+                          options[index] = event.target.value;
+                          setReviewDraft({ ...reviewDraft, options });
+                        }}
+                        placeholder={`选项 ${LETTERS[index]}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label className="field-label">正确答案</label>
+                <select
+                  className="field-input"
+                  value={reviewDraft.correctAnswer}
+                  onChange={(event) =>
+                    setReviewDraft({ ...reviewDraft, correctAnswer: event.target.value })
+                  }
+                >
+                  <option value="">请选择</option>
+                  {LETTERS.map((letter) => (
+                    <option value={letter} key={letter}>
+                      {letter}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
             <label className="field-label">解析（可留空）</label>
             <textarea

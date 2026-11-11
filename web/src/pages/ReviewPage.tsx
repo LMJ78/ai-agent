@@ -53,7 +53,9 @@ export function ReviewPage() {
       body: JSON.stringify({ answer })
     });
     setResults((prev) => ({ ...prev, [item.id]: result }));
-    window.setTimeout(() => void load(filter), 900);
+    // 保留当前卡片和结果，避免刚显示“答对了”就被刷新掉；
+    // 只更新统计，用户切换筛选或点刷新时再重新拉列表。
+    void api<ReviewStats>("/api/review/stats").then(setStats).catch(() => undefined);
   };
 
   const selfCheck = async (item: ReviewItem, result: "correct" | "wrong") => {
@@ -66,7 +68,7 @@ export function ReviewPage() {
       body: JSON.stringify({ result })
     });
     setResults((prev) => ({ ...prev, [item.id]: data }));
-    window.setTimeout(() => void load(filter), 900);
+    void api<ReviewStats>("/api/review/stats").then(setStats).catch(() => undefined);
   };
 
   return (
