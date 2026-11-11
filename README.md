@@ -187,7 +187,7 @@ pnpm dev
 
 ```powershell
 # 前端改为监听局域网，然后查电脑 IPv4
-pnpm dev -- --host 0.0.0.0
+pnpm exec vite --host 0.0.0.0
 ipconfig
 ```
 
