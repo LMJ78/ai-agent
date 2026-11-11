@@ -10,6 +10,7 @@ export function HabitsPage() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("✅");
+  const [remindAt, setRemindAt] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -28,9 +29,10 @@ export function HabitsPage() {
     if (!name.trim()) return;
     await api<Habit>("/api/habits", {
       method: "POST",
-      body: JSON.stringify({ name: name.trim(), icon })
+      body: JSON.stringify({ name: name.trim(), icon, remind_at: remindAt })
     });
     setName("");
+    setRemindAt("");
     await load();
   };
 
@@ -78,6 +80,13 @@ export function HabitsPage() {
               }}
               placeholder="新习惯，例如：每天背 30 个单词"
             />
+            <input
+              type="time"
+              className="input habit-remind"
+              value={remindAt}
+              onChange={(event) => setRemindAt(event.target.value)}
+              title="每天提醒时间（可选）"
+            />
             <button className="btn primary" disabled={!name.trim()} onClick={() => void add()}>
               <Plus size={14} /> 加入
             </button>
@@ -103,6 +112,7 @@ export function HabitsPage() {
                   <strong>{habit.name}</strong>
                   <span className="faint">
                     连续 {habit.streak} 天 · 本周 {habit.week_done} 次
+                    {habit.remind_at ? ` · 每天 ${habit.remind_at} 提醒` : ""}
                   </span>
                 </div>
                 <button

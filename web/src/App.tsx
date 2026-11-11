@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Coffee, GraduationCap, Menu, PanelLeftOpen } from "lucide-react";
+import { Bell, Coffee, GraduationCap, Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar, type PageKey } from "./components/Sidebar";
 import { ChatView } from "./components/ChatView";
 import { LoginPage } from "./pages/LoginPage";
@@ -10,6 +10,7 @@ import { CalendarPage } from "./pages/CalendarPage";
 import { NewsPage } from "./pages/NewsPage";
 import { HabitsPage } from "./pages/HabitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { ApiError, api, clearAuth, getStoredUser, getToken, me } from "./lib/api";
 import type {
   AuthResponse,
@@ -36,6 +37,8 @@ export default function App() {
     () => localStorage.getItem("ai_agent_sidebar_collapsed") === "1"
   );
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [reviewDue, setReviewDue] = useState(0);
   const sessionsRequest = useRef(0);
 
   const notify = (text: string, kind: "ok" | "error" = "ok") => {
@@ -79,8 +82,21 @@ export default function App() {
     }
   };
 
+  const refreshBadges = async () => {
+    try {
+      const [notifications, stats] = await Promise.all([
+        api<{ unread: number }>("/api/notifications/unread-count"),
+        api<{ due: number }>("/api/review/stats")
+      ]);
+      setUnread(notifications.unread);
+      setReviewDue(stats.due);
+    } catch {
+      // 徽标失败不影响主流程
+    }
+  };
+
   const refreshAll = async () => {
-    await Promise.all([refreshSessions(), refreshCourses()]);
+    await Promise.all([refreshSessions(), refreshCourses(), refreshBadges()]);
   };
 
   useEffect(() => {
@@ -124,6 +140,15 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, user?.id]);
 
+  // 顶栏/侧栏红点：每分钟刷新一次，切页时也刷新。
+  useEffect(() => {
+    if (!user) return;
+    void refreshBadges();
+    const timer = window.setInterval(() => void refreshBadges(), 60_000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, page]);
+
   const handleAuthed = (data: AuthResponse) => {
     setUser(data.user);
     setPage("chat");
@@ -144,7 +169,10 @@ export default function App() {
     setMode(next);
     setSessions([]);
     setSelectedQuestion(null);
-    const validPages = next === "life" ? ["chat", "news", "calendar", "habits", "settings"] : ["chat", "review", "knowledge", "questions"];
+    const validPages =
+      next === "life"
+        ? ["chat", "news", "calendar", "habits", "settings", "notifications"]
+        : ["chat", "review", "knowledge", "questions", "notifications"];
     if (!validPages.includes(page)) setPage("chat");
     if (activeSession) {
       setActiveSession(null);
@@ -193,6 +221,18 @@ export default function App() {
     notify("题目已放进聊天框，选好节奏后发送");
   };
 
+  const openNotificationLink = (link: string) => {
+    const target = (link || "notifications") as PageKey;
+    if (target === "review" || target === "knowledge" || target === "questions") {
+      setMode("study");
+    }
+    if (["news", "calendar", "habits", "settings"].includes(target)) {
+      setMode("life");
+    }
+    setPage(target);
+    setSidebarOpen(false);
+  };
+
   const topTitle = useMemo(() => {
     if (page === "knowledge") return "知识库";
     if (page === "questions") return "题库";
@@ -201,6 +241,7 @@ export default function App() {
     if (page === "calendar") return "日程";
     if (page === "habits") return "习惯";
     if (page === "settings") return "设置与用量";
+    if (page === "notifications") return "通知";
     return activeSession?.title || (selectedQuestion ? "讲解这道题" : "新对话");
   }, [page, activeSession, selectedQuestion]);
 
@@ -212,6 +253,7 @@ export default function App() {
     if (page === "calendar") return "课表、实验和约会，提前提醒";
     if (page === "habits") return "每天一点，连续天数自己会说话";
     if (page === "settings") return "早晚简报与 token 用量";
+    if (page === "notifications") return "简报、待办、日程、习惯与错题提醒";
     return `${mode === "study" ? "学习模式" : "生活模式"}${
       mode === "study" && activeCourse ? ` · ${activeCourse}` : ""
     }`;
@@ -233,6 +275,8 @@ export default function App() {
         activeSessionId={activeSession?.id ?? null}
         activePage={page}
         mode={mode}
+        unreadNotifications={unread}
+        reviewDue={reviewDue}
         open={sidebarOpen}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
@@ -266,6 +310,18 @@ export default function App() {
             <h1>{topTitle}</h1>
             <p>{pageSubtitle}</p>
           </div>
+
+          <button
+            className="icon-btn notification-bell"
+            onClick={() => setPage("notifications")}
+            title="通知"
+            aria-label="通知"
+          >
+            <Bell size={17} />
+            {unread > 0 && (
+              <span className="notification-badge">{unread > 99 ? "99+" : unread}</span>
+            )}
+          </button>
 
           {page === "chat" && (
             <div className="mode-switch">
@@ -319,6 +375,12 @@ export default function App() {
           {page === "calendar" && <CalendarPage />}
           {page === "habits" && <HabitsPage />}
           {page === "settings" && <SettingsPage notify={notify} />}
+          {page === "notifications" && (
+            <NotificationsPage
+              onOpen={openNotificationLink}
+              onUnreadChange={(count) => setUnread(count)}
+            />
+          )}
         </div>
       </main>
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Bell,
   BookOpen,
   Brain,
   CalendarDays,
@@ -30,7 +31,8 @@ export type PageKey =
   | "news"
   | "calendar"
   | "habits"
-  | "settings";
+  | "settings"
+  | "notifications";
 
 type Props = {
   user: User;
@@ -38,6 +40,8 @@ type Props = {
   activeSessionId: number | null;
   activePage: PageKey;
   mode: "study" | "life";
+  unreadNotifications: number;
+  reviewDue: number;
   open: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -53,7 +57,8 @@ const STUDY_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[]
   { key: "chat", label: "聊天", icon: MessageSquare },
   { key: "review", label: "错题本", icon: Brain },
   { key: "knowledge", label: "知识库", icon: Library },
-  { key: "questions", label: "题库", icon: BookOpen }
+  { key: "questions", label: "题库", icon: BookOpen },
+  { key: "notifications", label: "通知", icon: Bell }
 ];
 
 const LIFE_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[] = [
@@ -61,7 +66,8 @@ const LIFE_PAGES: { key: PageKey; label: string; icon: typeof MessageSquare }[] 
   { key: "news", label: "每日新闻", icon: Newspaper },
   { key: "calendar", label: "日程", icon: CalendarDays },
   { key: "habits", label: "习惯", icon: ListChecks },
-  { key: "settings", label: "设置与用量", icon: Settings }
+  { key: "settings", label: "设置与用量", icon: Settings },
+  { key: "notifications", label: "通知", icon: Bell }
 ];
 
 function formatSessionDate(iso: string): string {
@@ -83,6 +89,8 @@ export function Sidebar({
   activeSessionId,
   activePage,
   mode,
+  unreadNotifications,
+  reviewDue,
   open,
   collapsed,
   onToggleCollapse,
@@ -233,6 +241,12 @@ export function Sidebar({
               title={collapsed ? item.label : undefined}
             >
               <Icon size={15} /> <span className="nav-label">{item.label}</span>
+              {item.key === "notifications" && unreadNotifications > 0 && (
+                <span className="nav-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>
+              )}
+              {item.key === "review" && reviewDue > 0 && (
+                <span className="nav-badge">{reviewDue > 99 ? "99+" : reviewDue}</span>
+              )}
             </button>
           );
         })}

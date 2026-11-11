@@ -118,6 +118,66 @@ def upcoming_events(
     return list_events(days=days, user=user, db=db)
 
 
+@router.get("/calendar/conflicts")
+def calendar_conflicts(
+    days: int = Query(default=7, ge=1, le=60),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """未来 N 天时间重叠的日程，前端用来提示“这节课和那个实验撞了”。"""
+    start = datetime.now(timezone.utc)
+    end = start + timedelta(days=days)
+    rows = db.scalars(
+        select(CalendarEvent).where(CalendarEvent.user_id == user.id)
+    ).all()
+    occurrences: list[dict] = []
+    for event in rows:
+        duration = (
+            event.end_at - event.start_at
+            if event.end_at and event.start_at
+            else timedelta(minutes=60)
+        )
+        for occurrence in occurrences_between(event, start, end):
+            occurrences.append(
+                {
+                    "id": event.id,
+                    "title": event.title,
+                    "location": event.location,
+                    "start": occurrence,
+                    "end": occurrence + duration,
+                }
+            )
+    occurrences.sort(key=lambda item: item["start"])
+    conflicts: list[dict] = []
+    for index, first in enumerate(occurrences):
+        for second in occurrences[index + 1 :]:
+            if second["start"] >= first["end"]:
+                break
+            if first["id"] == second["id"]:
+                continue
+            conflicts.append(
+                {
+                    "first": {
+                        "id": first["id"],
+                        "title": first["title"],
+                        "location": first["location"],
+                        "start_at": _iso(first["start"]),
+                        "end_at": _iso(first["end"]),
+                    },
+                    "second": {
+                        "id": second["id"],
+                        "title": second["title"],
+                        "location": second["location"],
+                        "start_at": _iso(second["start"]),
+                        "end_at": _iso(second["end"]),
+                    },
+                }
+            )
+            if len(conflicts) >= 50:
+                return conflicts
+    return conflicts
+
+
 @router.post("/calendar/events", status_code=201)
 def create_event(
     payload: EventIn,

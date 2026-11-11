@@ -46,6 +46,24 @@ def _ensure_columns() -> None:
                 "ALTER TABLE messages ADD COLUMN citations TEXT NOT NULL DEFAULT '[]'"
             )
 
+        habit_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(habits)")
+        }
+        if "remind_at" not in habit_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE habits ADD COLUMN remind_at VARCHAR(5) NOT NULL DEFAULT ''"
+            )
+
+        news_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(news_items)")
+        }
+        if "read_at" not in news_columns:
+            conn.exec_driver_sql("ALTER TABLE news_items ADD COLUMN read_at DATETIME")
+        if "starred" not in news_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE news_items ADD COLUMN starred BOOLEAN NOT NULL DEFAULT 0"
+            )
+
 
 def init_db() -> None:
     """建表（已存在则跳过），并确保 demo 用户存在。

@@ -18,6 +18,7 @@ router = APIRouter()
 class HabitIn(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     icon: str = Field(default="✅", max_length=16)
+    remind_at: str = Field(default="", max_length=5, pattern=r"^([01]\d|2[0-3]):[0-5]\d$|^$")
 
 
 def _streak(db: Session, habit_id: int, today: date) -> int:
@@ -75,6 +76,7 @@ def list_habits(
             "id": habit.id,
             "name": habit.name,
             "icon": habit.icon,
+            "remind_at": habit.remind_at,
             "done_today": habit.id in done,
             "streak": _streak(db, habit.id, today),
             "week_done": week_counts.get(habit.id, 0),
@@ -89,7 +91,12 @@ def create_habit(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    habit = Habit(user_id=user.id, name=payload.name.strip(), icon=payload.icon)
+    habit = Habit(
+        user_id=user.id,
+        name=payload.name.strip(),
+        icon=payload.icon,
+        remind_at=payload.remind_at,
+    )
     db.add(habit)
     db.commit()
     db.refresh(habit)
@@ -97,6 +104,7 @@ def create_habit(
         "id": habit.id,
         "name": habit.name,
         "icon": habit.icon,
+        "remind_at": habit.remind_at,
         "done_today": False,
         "streak": 0,
         "week_done": 0,
@@ -133,6 +141,7 @@ def toggle_habit(
         "id": habit.id,
         "name": habit.name,
         "icon": habit.icon,
+        "remind_at": habit.remind_at,
         "done_today": done,
         "streak": _streak(db, habit.id, today),
         "week_done": 0,

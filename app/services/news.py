@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timeutil import local_date, now_utc
 from app.db.models import NewsItem
+from app.services.notifications import create_notification
 from app.tools.base import ToolError
 from app.tools.web_search import search_web
 
@@ -113,6 +114,9 @@ async def refresh_news(
     for category, query in NEWS_CATEGORIES:
         try:
             results = await search_web(query, 2, topic="news", days=2)
+            # Tavily 的 news topic 偶尔对中文体育/科技查询返回空；退回普通搜索再试一次。
+            if not results:
+                results = await search_web(query, 2)
         except ToolError as exc:
             errors.append(exc)
             continue
@@ -137,6 +141,18 @@ async def refresh_news(
                 )
             )
             added += 1
+        db.commit()
+
+    if added:
+        create_notification(
+            db,
+            user_id=user_id,
+            kind="news",
+            title="今日新闻已更新",
+            body=f"五个方向共 {added} 条，点开看看今天发生了什么。",
+            link="news",
+            dedupe_key=f"news:{today.isoformat()}",
+        )
         db.commit()
 
     if added == 0 and errors:
@@ -171,15 +187,18 @@ def list_news(db: Session, user_id: int, *, days: int = RETENTION_DAYS) -> list[
                 "published_at": item.published_at.isoformat()
                 if item.published_at
                 else "",
+                "read": item.read_at is not None,
+                "starred": bool(item.starred),
             }
         )
 
     response = []
     for day in sorted(by_date, reverse=True):
+        # 固定展示五个方向；某个方向今天没抓到内容时也保留占位，
+        # 避免页面看起来“少了几个方面”。
         categories = [
             {"name": category, "items": by_date[day].get(category, [])}
             for category, _ in NEWS_CATEGORIES
-            if by_date[day].get(category)
         ]
         response.append({"date": day.isoformat(), "categories": categories})
     return response

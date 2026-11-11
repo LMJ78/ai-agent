@@ -18,6 +18,7 @@ from app.core.deps import get_current_user
 from app.db.base import get_db
 from app.db.models import Quiz, QuizQuestion, User
 from app.rag.retriever import search_chunks
+from app.services.notifications import create_notification
 from app.services.review import record_wrong_answer
 
 router = APIRouter()
@@ -308,6 +309,16 @@ def submit_quiz(
         )
 
     quiz.status = "submitted"
+    if wrong_added:
+        create_notification(
+            db,
+            user_id=user.id,
+            kind="review",
+            title=f"自测有 {wrong_added} 道错题已加入错题本",
+            body="明天开始按 3 / 7 / 14 / 30 天的节奏复习。",
+            link="review",
+            dedupe_key=f"quiz-wrong:{quiz.id}",
+        )
     db.commit()
     db.refresh(quiz)
     return {

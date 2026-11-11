@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Clock3, LoaderCircle, MapPin, Plus, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock3, LoaderCircle, MapPin, Plus, Trash2, Upload } from "lucide-react";
 import { ApiError, api } from "../lib/api";
-import type { CalendarEvent } from "../types";
+import type { CalendarConflict, CalendarEvent } from "../types";
 
 function localInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -21,6 +21,7 @@ function formatWhen(value: string): string {
 
 export function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [conflicts, setConflicts] = useState<CalendarConflict[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -39,7 +40,12 @@ export function CalendarPage() {
   const load = async () => {
     setLoading(true);
     try {
-      setEvents(await api<CalendarEvent[]>("/api/calendar/events?days=30"));
+      const [rows, clashes] = await Promise.all([
+        api<CalendarEvent[]>("/api/calendar/events?days=30"),
+        api<CalendarConflict[]>("/api/calendar/conflicts?days=30").catch(() => [])
+      ]);
+      setEvents(rows);
+      setConflicts(clashes);
     } finally {
       setLoading(false);
     }
@@ -161,6 +167,19 @@ export function CalendarPage() {
           <p className="faint" style={{ margin: "-4px 0 14px", fontSize: 12.5 }}>
             {importMsg}
           </p>
+        )}
+
+        {conflicts.length > 0 && (
+          <div className="conflict-banner">
+            <AlertTriangle size={16} />
+            <div>
+              <strong>有 {conflicts.length} 组日程时间重叠</strong>
+              <span>
+                {conflicts[0].first.title} 与 {conflicts[0].second.title}
+                {conflicts.length > 1 ? " 等" : ""}，建议调整其中一个的时间。
+              </span>
+            </div>
+          </div>
         )}
 
         <div className="calendar-layout">

@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { Brain, Check, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import type { ReviewItem, ReviewStats } from "../types";
+import type { ReviewItem, ReviewMastery, ReviewPlan, ReviewStats } from "../types";
 
 type Filter = "due" | "all" | "mastered";
 
 export function ReviewPage() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [stats, setStats] = useState<ReviewStats | null>(null);
+  const [mastery, setMastery] = useState<ReviewMastery[]>([]);
+  const [examDate, setExamDate] = useState("");
+  const [plan, setPlan] = useState<ReviewPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
   const [filter, setFilter] = useState<Filter>("due");
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -23,12 +27,14 @@ export function ReviewPage() {
           : next === "mastered"
             ? "/api/review/items?status=mastered&limit=100"
             : "/api/review/items?limit=100";
-      const [list, summary] = await Promise.all([
+      const [list, summary, masteryRows] = await Promise.all([
         api<ReviewItem[]>(query),
-        api<ReviewStats>("/api/review/stats")
+        api<ReviewStats>("/api/review/stats"),
+        api<ReviewMastery[]>("/api/review/mastery")
       ]);
       setItems(list);
       setStats(summary);
+      setMastery(masteryRows);
       setResults({});
       setRevealed({});
     } finally {
@@ -71,6 +77,19 @@ export function ReviewPage() {
     void api<ReviewStats>("/api/review/stats").then(setStats).catch(() => undefined);
   };
 
+  const makePlan = async () => {
+    if (!examDate) return;
+    setPlanLoading(true);
+    try {
+      const data = await api<ReviewPlan>(
+        `/api/review/plan?exam_date=${encodeURIComponent(examDate)}`
+      );
+      setPlan(data);
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-inner">
@@ -109,6 +128,74 @@ export function ReviewPage() {
             </div>
           </div>
         )}
+
+        <div className="study-loop-grid">
+          <div className="card study-loop-card">
+            <div className="card-head">
+              <div>
+                <strong>章节掌握度</strong>
+                <p>答对越多，进度条越满；先补最短的那块。</p>
+              </div>
+            </div>
+            {mastery.length === 0 ? (
+              <p className="faint">还没有数据，先做一套自测或从聊天加入错题。</p>
+            ) : (
+              <div className="mastery-list">
+                {mastery.slice(0, 8).map((row) => (
+                  <div className="mastery-row" key={`${row.course}-${row.chapter}`}>
+                    <div className="mastery-label">
+                      <span>{row.chapter}</span>
+                      <span className="faint">
+                        {row.mastered}/{row.total}
+                      </span>
+                    </div>
+                    <div className="mastery-bar">
+                      <i style={{ width: `${row.mastery}%` }} />
+                    </div>
+                    {row.due > 0 && <span className="badge warn">到期 {row.due}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card study-loop-card">
+            <div className="card-head">
+              <div>
+                <strong>考前冲刺</strong>
+                <p>填考试日期，按剩余天数排每天复习量。</p>
+              </div>
+            </div>
+            <div className="plan-form">
+              <input
+                type="date"
+                className="field-input"
+                value={examDate}
+                onChange={(event) => setExamDate(event.target.value)}
+              />
+              <button className="btn primary" disabled={!examDate || planLoading} onClick={() => void makePlan()}>
+                {planLoading ? "计算中…" : "生成计划"}
+              </button>
+            </div>
+            {plan && (
+              <div className="plan-result">
+                <strong>{plan.message}</strong>
+                <div className="mini-tags">
+                  <span className="badge">剩 {plan.days} 天</span>
+                  <span className="badge">待复习 {plan.active}</span>
+                  <span className="badge">今天到期 {plan.due}</span>
+                  <span className="badge ok">每天 {plan.daily_target} 道</span>
+                </div>
+                {plan.weak_chapters.length > 0 && (
+                  <p className="faint">
+                    优先章节：
+                    {plan.weak_chapters.map((row) => `${row.chapter}（${row.mastery}%）`).join("、")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="tab-row">
           {(

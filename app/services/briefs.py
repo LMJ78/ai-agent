@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.timeutil import CHINA_TZ, at_local_day, local_date, parse_hhmm
 from app.db.models import CalendarEvent, ReviewItem, Todo, User, UserSettings
 from app.services.calendar import occurrences_between
+from app.services.notifications import create_notification
 from app.services.push import PushError, PushNotConfiguredError, send_to_user
 
 
@@ -126,16 +127,28 @@ async def send_due_briefs(now: datetime | None = None) -> None:
                         title, content = await build_morning_brief(db, user, cfg)
                     else:
                         title, content = await build_evening_review(db, user, cfg)
-                    await send_to_user(db, user.id, title, content)
+
+                    # 先落站内通知：即使没有 PushPlus，也不丢内容。
+                    create_notification(
+                        db,
+                        user_id=user.id,
+                        kind="brief",
+                        title=title,
+                        body=content,
+                        link="chat",
+                        dedupe_key=f"brief:{kind}:{today.isoformat()}",
+                    )
+
+                    try:
+                        await send_to_user(db, user.id, title, content)
+                    except (PushNotConfiguredError, PushError):
+                        # 推送失败不影响站内通知；今天不再重复生成。
+                        pass
+
                     if kind == "morning":
                         cfg.last_morning_date = today
                     else:
                         cfg.last_evening_date = today
                     db.commit()
-                except PushNotConfiguredError:
-                    break
-                except PushError:
-                    db.rollback()
-                    break
                 except Exception:  # noqa: BLE001
                     db.rollback()

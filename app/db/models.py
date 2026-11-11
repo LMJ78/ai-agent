@@ -345,6 +345,8 @@ class Habit(Base):
     icon: Mapped[str] = mapped_column(String(16), default="✅")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 每天提醒时间 HH:MM；空字符串表示不提醒。
+    remind_at: Mapped[str] = mapped_column(String(5), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -381,4 +383,29 @@ class NewsItem(Base):
         DateTime(timezone=True), nullable=True
     )
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Notification(Base):
+    """站内通知：把原本只走 PushPlus 的内容持久化下来，没配推送也不会错过。"""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedupe_key", name="uq_notification_user_dedupe"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text, default="")
+    link: Mapped[str] = mapped_column(String(255), default="")
+    dedupe_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

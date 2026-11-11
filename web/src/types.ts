@@ -131,6 +131,28 @@ export type ReviewItem = {
   created_at: string;
 };
 
+export type ReviewMastery = {
+  course: string;
+  chapter: string;
+  total: number;
+  active: number;
+  mastered: number;
+  due: number;
+  wrong_count: number;
+  best_streak: number;
+  mastery: number;
+};
+
+export type ReviewPlan = {
+  exam_date: string;
+  days: number;
+  active: number;
+  due: number;
+  daily_target: number;
+  weak_chapters: ReviewMastery[];
+  message: string;
+};
+
 export type ReviewStats = {
   active: number;
   mastered: number;
@@ -152,6 +174,23 @@ export type CalendarEvent = {
   occurrence_end?: string | null;
 };
 
+export type CalendarConflict = {
+  first: {
+    id: number;
+    title: string;
+    location: string;
+    start_at: string;
+    end_at: string;
+  };
+  second: {
+    id: number;
+    title: string;
+    location: string;
+    start_at: string;
+    end_at: string;
+  };
+};
+
 export type PushChannelState = {
   provider: string;
   configured: boolean;
@@ -171,6 +210,7 @@ export type Habit = {
   id: number;
   name: string;
   icon: string;
+  remind_at: string;
   sort_order: number;
   active: boolean;
   done_today: boolean;
@@ -202,6 +242,8 @@ export type NewsItem = {
   url: string;
   source: string;
   published_at: string;
+  read: boolean;
+  starred: boolean;
 };
 
 export type NewsCategory = {
@@ -218,4 +260,19 @@ export type NewsResponse = {
   days: NewsDay[];
   retention_days: number;
   warning: string;
+};
+
+export type NotificationItem = {
+  id: number;
+  kind: string;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  created_at: string;
+};
+
+export type NotificationsResponse = {
+  items: NotificationItem[];
+  unread: number;
 };

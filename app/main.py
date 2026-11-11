@@ -21,6 +21,7 @@ from app.api.documents import router as documents_router
 from app.api.habits import router as habits_router
 from app.api.memories import router as memories_router
 from app.api.news import router as news_router
+from app.api.notifications import router as notifications_router
 from app.api.push import router as push_router
 from app.api.questions import router as questions_router
 from app.api.quizzes import router as quizzes_router
@@ -78,6 +79,7 @@ app.include_router(review_router, prefix="/api", tags=["review"])
 app.include_router(calendar_router, prefix="/api", tags=["calendar"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 app.include_router(news_router, prefix="/api", tags=["news"])
+app.include_router(notifications_router, prefix="/api", tags=["notifications"])
 app.include_router(habits_router, prefix="/api", tags=["habits"])
 app.include_router(usage_router, prefix="/api", tags=["usage"])
 

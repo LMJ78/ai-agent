@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, LoaderCircle, Newspaper, RefreshCw } from "lucide-react";
+import { ExternalLink, LoaderCircle, Newspaper, RefreshCw, Star } from "lucide-react";
 import { ApiError, api } from "../lib/api";
 import type { NewsDay, NewsResponse } from "../types";
 
@@ -59,6 +59,35 @@ export function NewsPage() {
     void load();
   }, []);
 
+  const patchItem = (id: number, patch: Partial<{ read: boolean; starred: boolean }>) => {
+    setDays((prev) =>
+      prev.map((day) => ({
+        ...day,
+        categories: day.categories.map((category) => ({
+          ...category,
+          items: category.items.map((item) => (item.id === id ? { ...item, ...patch } : item))
+        }))
+      }))
+    );
+  };
+
+  const openItem = async (id: number) => {
+    patchItem(id, { read: true });
+    try {
+      await api(`/api/news/${id}/read`, { method: "POST" });
+    } catch {
+      // 阅读状态失败不挡打开原文
+    }
+  };
+
+  const toggleStar = async (id: number, starred: boolean) => {
+    patchItem(id, { starred: !starred });
+    await api(`/api/news/${id}/star`, {
+      method: "POST",
+      body: JSON.stringify({ starred: !starred })
+    });
+  };
+
   const refresh = async () => {
     setRefreshing(true);
     setError("");
@@ -112,18 +141,38 @@ export function NewsPage() {
               {day.categories.map((category) => (
                 <div className="news-category" key={`${day.date}-${category.name}`}>
                   <h3>{category.name}</h3>
+                  {category.items.length === 0 && (
+                    <p className="news-empty">今天这个方向暂无更新</p>
+                  )}
                   {category.items.map((item) => (
-                    <article className="news-item" key={item.id}>
-                      <a href={item.url} target="_blank" rel="noreferrer">
+                    <article className={`news-item ${item.read ? "read" : ""}`} key={item.id}>
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => void openItem(item.id)}
+                      >
                         <h4>{item.title}</h4>
                         <p>{cleanSummary(item.summary)}</p>
                       </a>
                       <div className="news-meta">
                         <span>{item.source || "网页"}</span>
                         {item.published_at && <span>{publishedLabel(item.published_at)}</span>}
-                        <a href={item.url} target="_blank" rel="noreferrer">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => void openItem(item.id)}
+                        >
                           原文 <ExternalLink size={11} />
                         </a>
+                        <button
+                          className={`news-star ${item.starred ? "active" : ""}`}
+                          title={item.starred ? "取消收藏" : "收藏"}
+                          onClick={() => void toggleStar(item.id, item.starred)}
+                        >
+                          <Star size={12} fill={item.starred ? "currentColor" : "none"} />
+                        </button>
                       </div>
                     </article>
                   ))}
